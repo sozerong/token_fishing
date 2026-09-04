@@ -11,3 +11,6 @@ venv/
 *.egg-info/
 dist/
 build/
+
+# 생성물. 실제 사용량 숫자가 박혀 있다.
+tokenfishing.html
