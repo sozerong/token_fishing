@@ -20,7 +20,13 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .aggregate import build_windows, collect_entries, current_window, snapshot
+from .aggregate import (
+    build_windows,
+    collect_entries,
+    current_window,
+    snapshot,
+    weekly_totals,
+)
 from .state import GameState, to_game_state
 
 DEFAULT_OUT = Path("tokenfishing.html")
@@ -38,7 +44,7 @@ def build_state() -> GameState:
         else []
     )
     prov = dict(Counter(e.provenance for e in in_window))
-    return to_game_state(snap, prov)
+    return to_game_state(snap, prov, weekly_catch=weekly_totals(entries, now).catch)
 
 
 def render(state: GameState, generated_at: datetime) -> str:
@@ -52,6 +58,7 @@ def render(state: GameState, generated_at: datetime) -> str:
         "bitePerMin": state.bite_per_min,
         "minutesLeft": state.minutes_left,
         "daylight": state.daylight,
+        "weeklyCatch": state.weekly_catch,
         "pinned": state.pinned,
         "tokens": state.tokens,
         "provenance": state.provenance,

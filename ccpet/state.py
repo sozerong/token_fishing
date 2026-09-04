@@ -81,6 +81,9 @@ class GameState:
     먹지만 JSONL에 안 남기 때문에, 그런 사용이 창을 열었으면 추정이 어긋난다.
     화면에서 이걸 숨기지 말 것 — 틀릴 수 있는 숫자를 확실한 척 보여주면 안 된다."""
 
+    weekly_catch: int = 0
+    """주간 리셋 이후 조업량. 공식 화면의 "주간 한도"에 대응한다. 0이면 미계산."""
+
     tokens: dict[str, int] = field(default_factory=dict)
     """네 항목 원본. 화면이 다르게 세고 싶을 때를 위해 그대로 싣는다."""
 
@@ -89,7 +92,9 @@ class GameState:
 
 
 def to_game_state(
-    snap: Snapshot, provenance: dict[str, int] | None = None
+    snap: Snapshot,
+    provenance: dict[str, int] | None = None,
+    weekly_catch: int = 0,
 ) -> GameState:
     w = snap.window
     if w is None:
@@ -104,6 +109,7 @@ def to_game_state(
             minutes_left=None,
             daylight=0.0,
             pinned=snap.pinned,
+            weekly_catch=weekly_catch,
             tokens={},
             provenance=provenance or {},
         )
@@ -125,6 +131,7 @@ def to_game_state(
         # 남은 시간이 많을수록 해가 높다.
         daylight=max(0.0, min(1.0, (left.total_seconds() / WINDOW.total_seconds()) if left else 0.0)),
         pinned=snap.pinned,
+        weekly_catch=weekly_catch,
         tokens={
             "input": w.input_tokens,
             "output": w.output_tokens,

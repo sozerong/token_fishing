@@ -16,7 +16,12 @@ from ccpet.aggregate import (  # noqa: E402
     burn_rate,
     collect_entries,
     current_window,
+    model_breakdown,
     snapshot,
+    totals_of,
+    weekly_end,
+    weekly_start,
+    weekly_totals,
 )
 from ccpet.parser import UsageEntry, parse_file  # noqa: E402
 
@@ -178,6 +183,72 @@ def test_collect_entries_dedups_across_files():
 def test_entries_are_sorted_by_time():
     entries = collect_entries([FIXTURES / "overlapping.jsonl"])
     assert [e.timestamp for e in entries] == sorted(e.timestamp for e in entries)
+
+
+def test_model_breakdown_groups_and_sorts():
+    """모델별 집계에는 추측이 없다. 이미 파싱한 model 필드를 묶기만 한다."""
+    entries = [
+        entry("a", utc(9), out=100, inp=1),
+        entry("b", utc(10), out=50, inp=1),
+        entry("c", utc(11), out=10, inp=1),
+    ]
+    from dataclasses import replace
+
+    entries = [
+        replace(e, model=m) for e, m in zip(entries, ["opus", "sonnet", "opus"])
+    ]
+
+    rows = model_breakdown(entries)
+
+    assert [m for m, _ in rows] == ["opus", "sonnet"], "조업량 많은 순"
+    opus = dict(rows)["opus"]
+    assert opus.requests == 2
+    assert opus.catch == 112          # (1+100) + (1+10)
+    assert dict(rows)["sonnet"].catch == 51
+
+
+def test_weekly_starts_on_the_configured_weekday():
+    """공식 화면이 "(화) 오전 12:00에 재설정"이라 기본값이 화요일이다."""
+    import os
+
+    # 2026-09-04는 금요일. 직전 화요일은 2026-09-01.
+    friday = datetime(2026, 9, 4, 17, 0, tzinfo=timezone.utc).astimezone()
+    start = weekly_start(friday)
+
+    assert start.astimezone().weekday() == 1, "화요일"
+    assert start.astimezone().hour == 0
+    assert weekly_end(friday) - start == timedelta(days=7)
+
+    os.environ["TOKENFISHING_WEEKLY_RESET_DAY"] = "0"  # 월요일
+    try:
+        assert weekly_start(friday).astimezone().weekday() == 0
+    finally:
+        del os.environ["TOKENFISHING_WEEKLY_RESET_DAY"]
+
+
+def test_weekly_totals_excludes_older_entries():
+    now = datetime(2026, 9, 4, 17, 0, tzinfo=timezone.utc)
+    start = weekly_start(now)
+
+    entries = [
+        entry("old", start - timedelta(days=1), out=999),   # 지난 주
+        entry("new1", start + timedelta(hours=1), out=10),
+        entry("new2", now - timedelta(minutes=5), out=20),
+    ]
+
+    wk = weekly_totals(entries, now)
+
+    assert wk.requests == 2
+    assert wk.catch == 32           # (1+10) + (1+20)
+    assert 999 not in (wk.output_tokens,)
+
+
+def test_totals_of_separates_catch_from_cache():
+    t = totals_of([
+        UsageEntry("a", "s", utc(9), "opus", 10, 20, 300, 4000, False, "stable"),
+    ])
+    assert t.catch == 30
+    assert t.total_tokens == 4330
 
 
 def main() -> int:

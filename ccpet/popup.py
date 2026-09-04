@@ -55,7 +55,7 @@ class Popup:
         self.canvas.pack()
 
         self.labels: dict[str, tk.Label] = {}
-        for key in ("catch", "tier", "bite", "left", "foot"):
+        for key in ("catch", "tier", "bite", "left", "weekly", "foot"):
             small = key == "foot"
             lbl = tk.Label(
                 root, anchor="w", justify="left",
@@ -125,6 +125,7 @@ class Popup:
             else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
         )
         self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
+        self.labels["weekly"].configure(text=f"주간 {s.weekly_catch:,} 토큰")
         note = "공식값 고정" if s.pinned else "추정 (웹/모바일 사용은 안 보임)"
         prov = " · ".join(f"{k} {v}" for k, v in s.provenance.items())
         self.labels["foot"].configure(text=f"{note} · {prov or '요청 없음'}")

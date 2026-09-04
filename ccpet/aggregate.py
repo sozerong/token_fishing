@@ -83,6 +83,84 @@ def collect_entries(files: Iterable[Path] | None = None) -> list[UsageEntry]:
     return sorted(seen.values(), key=lambda e: e.timestamp)
 
 
+@dataclass(frozen=True, slots=True)
+class Totals:
+    """임의의 엔트리 묶음의 합. 창 개념이 없는 집계(주간·모델별·전체)에 쓴다."""
+
+    requests: int
+    input_tokens: int
+    output_tokens: int
+    cache_creation_tokens: int
+    cache_read_tokens: int
+
+    @property
+    def catch(self) -> int:
+        """5시간 한도가 실제로 세는 값."""
+        return self.input_tokens + self.output_tokens
+
+    @property
+    def total_tokens(self) -> int:
+        return (
+            self.input_tokens + self.output_tokens
+            + self.cache_creation_tokens + self.cache_read_tokens
+        )
+
+
+def totals_of(entries: Iterable[UsageEntry]) -> Totals:
+    rows = list(entries)
+    return Totals(
+        len(rows),
+        sum(e.input_tokens for e in rows),
+        sum(e.output_tokens for e in rows),
+        sum(e.cache_creation_tokens for e in rows),
+        sum(e.cache_read_tokens for e in rows),
+    )
+
+
+def model_breakdown(entries: Iterable[UsageEntry]) -> list[tuple[str, Totals]]:
+    """모델별 사용량. 조업량 많은 순.
+
+    추측이 하나도 안 들어간다 — 이미 파싱해 둔 model 필드를 묶기만 한다.
+    """
+    buckets: dict[str, list[UsageEntry]] = {}
+    for e in entries:
+        buckets.setdefault(e.model, []).append(e)
+    pairs = [(m, totals_of(rows)) for m, rows in buckets.items()]
+    return sorted(pairs, key=lambda p: p[1].catch, reverse=True)
+
+
+WEEKLY_RESET_ENV = "TOKENFISHING_WEEKLY_RESET_DAY"
+DEFAULT_WEEKLY_RESET_DAY = 1
+"""주간 한도가 리셋되는 요일 (월=0 … 일=6). 기본 화요일.
+
+공식 사용량 화면의 "(화) 오전 12:00에 재설정"에서 가져왔다. 계정마다 다를 수 있어서
+TOKENFISHING_WEEKLY_RESET_DAY로 바꿀 수 있다. 시각은 로컬 자정."""
+
+
+def weekly_reset_day() -> int:
+    raw = os.environ.get(WEEKLY_RESET_ENV, "").strip()
+    if raw.isdigit() and 0 <= int(raw) <= 6:
+        return int(raw)
+    return DEFAULT_WEEKLY_RESET_DAY
+
+
+def weekly_start(now: datetime) -> datetime:
+    """직전 주간 리셋 시각 (로컬 자정)."""
+    local = now.astimezone()
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    days_since = (midnight.weekday() - weekly_reset_day()) % 7
+    return (midnight - timedelta(days=days_since)).astimezone(timezone.utc)
+
+
+def weekly_end(now: datetime) -> datetime:
+    return weekly_start(now) + timedelta(days=7)
+
+
+def weekly_totals(entries: Iterable[UsageEntry], now: datetime) -> Totals:
+    start = weekly_start(now)
+    return totals_of(e for e in entries if start <= e.timestamp <= now)
+
+
 RESET_ENV = "TOKENFISHING_RESET_AT"
 
 
@@ -264,8 +342,36 @@ def _main() -> None:
         print(f"리셋까지     {int(rest.total_seconds() // 3600)}시간 "
               f"{int(rest.total_seconds() % 3600 // 60)}분")
     print(f"burn rate    {snap.tokens_per_minute:,.0f} 토큰/분 (최근 1시간)")
+
+    # --- 주간 (공식 화면의 "주간 한도"에 대응) ---
+    now = snap.now
+    wk = weekly_totals(entries, now)
+    days_left = (weekly_end(now) - now)
+    print()
+    print(f"주간         {weekly_start(now).astimezone():%m-%d %H:%M} 부터, 요청 {wk.requests}개")
+    print(f"  조업량    {wk.catch:>14,}   (input+output)")
+    print(f"  전체      {wk.total_tokens:>14,}   (캐시 포함)")
+    print(f"  다음 리셋까지 {int(days_left.total_seconds() // 86400)}일 "
+          f"{int(days_left.total_seconds() % 86400 // 3600)}시간")
+
+    # --- 모델별 ---
+    print()
+    print("모델별 (조업량 기준)")
+    total_catch = sum(t.catch for _, t in model_breakdown(entries)) or 1
+    for model, t in model_breakdown(entries):
+        print(f"  {model:<28}{t.catch:>12,}  {100 * t.catch / total_catch:5.1f}%  "
+              f"요청 {t.requests}")
+
+    # --- 전체 누적 ---
+    life = totals_of(entries)
+    print()
+    print(f"전체 누적    요청 {life.requests:,}개 · 조업량 {life.catch:,} · "
+          f"전체 {life.total_tokens:,}")
     print()
     print(f"provenance   {dict(prov)}")
+    print()
+    print("한도 퍼센트와 소진 예측은 내지 않는다. 한도를 추측해야 나오는 값이고,")
+    print("추측한 값은 실제로 틀린다 — 레퍼런스는 82.6%라 했고 공식 화면은 35%였다.")
 
 
 if __name__ == "__main__":
