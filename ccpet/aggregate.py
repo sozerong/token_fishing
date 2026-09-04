@@ -347,22 +347,25 @@ def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snap
     if official is not None:
         weekly = official["weekly"]
 
-        # 사용률이 아직 유효한가. 낡게 만드는 건 흐른 시간이 아니라 **그 뒤의 사용량**이다.
-        # 놀고 있었다면 몇 시간 전 값이어도 여전히 정확하다. 반대로 그 사이에 요청이
-        # 있었으면 몇 분 전 값이라도 이미 낮게 잡힌 값이다.
-        captured = official["captured_at"]
-        used_since = (
-            any(e.timestamp > captured for e in entries) if captured else True
-        )
-        pct = None if used_since else official["used_percentage"]
-
+        # 공식 사용률은 있으면 그냥 쓴다.
+        #
+        # 한때 "캡처 이후 요청이 있으면 버린다"는 규칙을 뒀다가 오히려 망가졌다.
+        # 상태줄 훅은 대화가 오갈 때마다 다시 실행되므로, 읽는 시점에는 거의 항상
+        # 그 뒤에 요청이 하나쯤 있다. 그래서 공식 값이 매번 버려지고 훨씬 부정확한
+        # 플랜 근사로 떨어졌다 — 실측에서 공식 75%인데 화면은 ~59%를 보여줬다.
+        #
+        # 놓쳤던 전제: **토큰은 Claude Code가 돌 때만 쓰이고, 훅도 그때 돈다.**
+        # 그러니 이 값이 오래 낡아 있을 수가 없다. 몇 초 뒤처진 공식 수치가
+        # 한참 빗나간 추정보다 언제나 낫다.
+        #
+        # 남는 사각지대는 웹/모바일 사용인데, 그건 어차피 어떤 방법으로도 못 본다.
         return Snapshot(
             window=anchored_window(entries, official["reset_at"]),
             tokens_per_minute=rate,
             now=now,
             pinned=True,
-            used_percentage=pct,
-            weekly_percentage=None if used_since else weekly.get("used_percentage"),
+            used_percentage=official["used_percentage"],
+            weekly_percentage=weekly.get("used_percentage"),
             weekly_reset_at=(
                 datetime.fromtimestamp(float(weekly["resets_at"]), timezone.utc)
                 if weekly.get("resets_at") is not None

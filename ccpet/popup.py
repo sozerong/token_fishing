@@ -172,8 +172,8 @@ class Popup:
         if s.mode == config.DEPLETION and s.fill is not None:
             # 고갈 모드에서 화면의 물고기는 "잡은 수"가 아니라 "남은 바다"다.
             tier = f"{s.tier}  ·  바다에 {s.fish}마리 남음"
-            if s.fill_source == "plan":
-                tier += "  (플랜 근사)"
+            if s.fill_source != "official":
+                tier += "  (플랜 근사)" if s.fill_source == "plan" else "  (측정 근사)"
         else:
             tier = s.tier + (f"  (물고기 {s.fish_uncapped}마리)" if s.fish_uncapped else "")
         self.labels["tier"].configure(text=tier)
@@ -189,7 +189,13 @@ class Popup:
                   if s.weekly_percentage is not None
                   else f"주간 {s.weekly_catch:,} 토큰")
         self.labels["weekly"].configure(text=weekly)
-        note = "공식 수치" if s.pinned else "추정 (웹/모바일 사용은 안 보임)"
+        # 리셋 시각과 사용률은 출처가 다를 수 있다. 뭉뚱그려 "공식"이라 하지 않는다.
+        if not s.pinned:
+            note = "추정 (웹/모바일 사용은 안 보임)"
+        elif s.fill_source == "official":
+            note = "공식 수치"
+        else:
+            note = "리셋만 공식 · 사용률은 근사"
         prov = " · ".join(f"{k} {v}" for k, v in s.provenance.items())
         self.labels["foot"].configure(text=f"{note} · {prov or '요청 없음'}")
 

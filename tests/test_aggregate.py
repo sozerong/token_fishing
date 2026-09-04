@@ -304,43 +304,41 @@ def test_official_limits_beat_every_guess():
     assert snap.time_to_reset == timedelta(hours=3, minutes=11)
 
 
-def test_percentage_is_dropped_once_more_tokens_are_spent():
-    """사용률을 낡게 만드는 건 흐른 시간이 아니라 그 뒤의 사용량이다.
+def test_official_percentage_is_used_even_after_more_requests():
+    """캡처 이후 요청이 있어도 공식 사용률을 버리지 않는다.
 
-    캡처 이후 요청이 있었으면 그 퍼센트는 이미 낮게 잡힌 값이라 버린다.
-    반대로 놀고 있었다면 오래된 값이어도 그대로 정확하다.
+    한때 "그 뒤에 요청이 있으면 낡은 값"이라며 버렸는데, 상태줄 훅은 대화가 오갈
+    때마다 다시 실행되므로 읽는 시점에는 거의 항상 그 뒤에 요청이 하나쯤 있다.
+    결과적으로 공식 값이 매번 버려지고 훨씬 부정확한 근사로 떨어졌다 —
+    실측에서 공식 75%인데 화면은 ~59%를 보여줬다.
+
+    토큰은 Claude Code가 돌 때만 쓰이고 훅도 그때 돈다. 몇 초 뒤처진 공식 수치가
+    한참 빗나간 추정보다 언제나 낫다.
     """
     import json
     import tempfile
 
     reset = utc(20, 11)
+    entries = [entry("before", utc(15, 30), 10), entry("after", utc(16, 30), 20)]
 
-    def snap_with(captured, entries):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "limits.json"
-            path.write_text(json.dumps({
-                "captured_at": captured.isoformat(),
-                "rate_limits": {
-                    "five_hour": {"used_percentage": 51,
-                                  "resets_at": reset.timestamp()},
-                },
-            }), encoding="utf-8")
-            original = statusline.STATE_PATH
-            statusline.STATE_PATH = path
-            try:
-                return snapshot(entries, now=utc(17, 0))
-            finally:
-                statusline.STATE_PATH = original
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "limits.json"
+        path.write_text(json.dumps({
+            "captured_at": utc(16, 0).isoformat(),      # 16:30 요청보다 앞선다
+            "rate_limits": {
+                "five_hour": {"used_percentage": 75, "resets_at": reset.timestamp()},
+                "seven_day": {"used_percentage": 23, "resets_at": reset.timestamp()},
+            },
+        }), encoding="utf-8")
+        original = statusline.STATE_PATH
+        statusline.STATE_PATH = path
+        try:
+            snap = snapshot(entries, now=utc(17, 0))
+        finally:
+            statusline.STATE_PATH = original
 
-    # 캡처(16:00) 이후 16:30에 요청 → 퍼센트는 낡았다
-    spent = snap_with(utc(16, 0), [entry("a", utc(16, 30), 10)])
-    assert spent.used_percentage is None
-    assert spent.window is not None, "리셋 시각은 그대로 살아 있어야 한다"
-    assert spent.window.end == reset
-
-    # 캡처(16:00) 이후 아무 요청 없음 → 오래돼도 여전히 정확하다
-    idle = snap_with(utc(16, 0), [entry("a", utc(15, 30), 10)])
-    assert idle.used_percentage == 51
+    assert snap.used_percentage == 75
+    assert snap.weekly_percentage == 23
 
 
 def test_expired_official_limits_are_ignored():

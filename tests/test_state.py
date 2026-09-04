@@ -176,6 +176,35 @@ def test_plan_fills_in_when_official_percentage_is_missing():
     assert abs(official.fill - 0.80) < 0.01
 
 
+def test_learned_limit_beats_the_plan_table():
+    """공식 사용률을 한 번 보면 이 계정의 한도를 재서 기억한다.
+
+    표에 박아둔 근사치보다 실제로 관측한 값이 낫다. 플랜을 안 골라도 된다.
+    """
+    settings = dict(config.DEFAULTS)
+
+    # 공식 75%인 순간의 조업량이 225,478이었다면 한도는 약 300,637
+    assert config.learn_limit(settings, 225_478, 75.0) is True
+    assert abs(settings["learned_limit"] - 300_637) < 10
+
+    # 너무 이른 시점(사용률이 낮을 때)에는 배우지 않는다. 나눗셈 오차가 크다.
+    early = dict(config.DEFAULTS)
+    assert config.learn_limit(early, 3_000, 1.0) is False
+    assert early["learned_limit"] is None
+
+    # 잔떨림으로 매번 다시 쓰지 않는다
+    assert config.learn_limit(settings, 225_500, 75.0) is False
+
+    # 배운 값이 플랜 표를 이긴다
+    w = window(inp=0, out=150_000)
+    gs = to_game_state(
+        snap(w, now=utc(11)), plan="max20",
+        learned_limit=settings["learned_limit"],
+    )
+    assert gs.fill_source == "learned"
+    assert abs(gs.fill - 150_000 / settings["learned_limit"]) < 0.01
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

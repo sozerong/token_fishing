@@ -46,12 +46,19 @@ def build_state(settings: dict | None = None) -> GameState:
         else []
     )
     prov = dict(Counter(e.provenance for e in in_window))
+
+    # 공식 사용률을 본 김에 이 계정의 한도를 재둔다. 나중에 훅이 없을 때 쓴다.
+    catch = (snap.window.input_tokens + snap.window.output_tokens) if snap.window else 0
+    if config.learn_limit(settings, catch, snap.used_percentage):
+        config.save(settings)
+
     return to_game_state(
         snap,
         prov,
         weekly_catch=weekly_totals(entries, now).catch,
         mode=settings["mode"],
         plan=settings["plan"],
+        learned_limit=settings.get("learned_limit"),
     )
 
 
