@@ -34,6 +34,22 @@ FISH_COLORS = ("#e3a447", "#d96f4a", "#7ee787", "#79c0ff")
 BITE_SPEED = {"잠잠": 0.10, "잔잔": 0.22, "활발": 0.45, "폭주": 0.85}
 
 
+def _pile_slots(rows=(7, 6, 5, 4, 2)) -> list[tuple[int, int]]:
+    """갑판에 쌓이는 자리. 아래가 넓고 위로 갈수록 좁아진다.
+
+    합이 MAX_FISH_DRAWN(24)이라 100%일 때 바다가 비고 더미가 꽉 찬다.
+    """
+    slots = []
+    for row, count in enumerate(rows):
+        indent = row  # 위 줄일수록 안쪽으로
+        for col in range(count):
+            slots.append((indent * 2 + col * 4, row * 2))
+    return slots
+
+
+_PILE_SLOTS = _pile_slots()
+
+
 def _mix(a, b, t: float) -> str:
     return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
@@ -221,15 +237,22 @@ class Popup:
             self._px(f["x"] + (3 if f["dir"] > 0 else 1), y + 1, 1, 1, "#0d1117")
 
         bob = math.sin(t * 0.2) * 1.2
-        bx, by = 22, SEA - 8 + bob
-        self._px(bx, by + 6, 34, 5, "#6b4423")
-        self._px(bx + 3, by + 4, 28, 2, "#8b5a2b")
-        self._px(bx + 14, by - 6, 2, 10, "#3d2a16")
-        self._px(bx + 13, by - 10, 4, 4, "#e8c39e")
-        self._px(bx + 17, by - 9, 12, 1, "#a97b4f")
-        lx, ly = bx + 29, by - 8
+        bx, by = 16, SEA - 8 + bob
+        self._px(bx, by + 6, 46, 5, "#6b4423")          # 선체
+        self._px(bx + 3, by + 4, 40, 2, "#8b5a2b")      # 갑판
+
+        # 낚시꾼은 뱃머리 왼쪽. 갑판 오른쪽은 잡은 물고기 자리로 비워둔다.
+        self._px(bx + 4, by - 6, 2, 10, "#3d2a16")
+        self._px(bx + 3, by - 10, 4, 4, "#e8c39e")
+        self._px(bx + 7, by - 9, 11, 1, "#a97b4f")      # 낚싯대
+        lx, ly = bx + 18, by - 8
         self._px(lx, ly, 1, int((SEA + 8 + bob) - ly), "#7d8590")
         self._px(lx - 1, SEA + 7 + bob, 3, 3, "#f85149")
+
+        # 잡은 물고기가 갑판에 쌓인다. 바다에서 사라진 만큼 여기로 온다.
+        # 아래 줄부터 채우고 위로 갈수록 좁아진다 — 쌓인 더미처럼 보이게.
+        for i, (dx, dy) in enumerate(_PILE_SLOTS[: s.on_boat]):
+            self._px(bx + 22 + dx, by + 3 - dy, 3, 2, FISH_COLORS[i % 4])
 
         if not s.is_fishing:
             self.canvas.create_rectangle(

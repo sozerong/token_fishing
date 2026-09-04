@@ -73,7 +73,9 @@ def render(state: GameState, generated_at: datetime) -> str:
         "minutesLeft": state.minutes_left,
         "daylight": state.daylight,
         "weeklyCatch": state.weekly_catch,
+        "weeklyPct": state.weekly_percentage,
         "casts": state.casts,
+        "onBoat": state.on_boat,
         "fill": state.fill,
         "fillSource": state.fill_source,
         "pinned": state.pinned,
@@ -129,6 +131,7 @@ _HTML = """<!doctype html>
     <div class="row"><span class="k">등급</span><span class="v" id="tier"></span></div>
     <div class="row"><span class="k">입질</span><span class="v" id="bite"></span></div>
     <div class="row"><span class="k">리셋까지</span><span class="v" id="left"></span></div>
+    <div class="row"><span class="k">주간</span><span class="v" id="weekly"></span></div>
     <div class="foot" id="foot"></div>
   </div>
   <button id="pip">PiP 창으로 띄우기</button>
@@ -141,13 +144,15 @@ const $ = id => document.getElementById(id);
 $("catch").textContent = !S.isFishing ? "—"
   : S.fill === null ? S.catch.toLocaleString() + " 토큰"
   : `${S.fillSource === "official" ? "" : "~"}${Math.round(S.fill*100)}%  ·  ${S.catch.toLocaleString()} 토큰`;
-$("tier").textContent  = S.tier + (S.fishUncapped ? `  (물고기 ${S.fishUncapped}마리)` : "");
-$("bite").textContent  = `${S.bite} · ${Math.round(S.bitePerMin).toLocaleString()} 토큰/분`;
+$("tier").textContent  = S.tier;
+$("bite").textContent  = `${S.bite} · 캐스팅 ${S.casts.toLocaleString()}회`;
 $("left").textContent  = S.minutesLeft === null ? "조업 종료"
   : `${S.pinned ? "" : "~"}${Math.floor(S.minutesLeft/60)}시간 ${S.minutesLeft%60}분`;
 if (!S.pinned) $("left").style.color = "#d29922";
-const prov = Object.entries(S.provenance).map(([k,v]) => `${k} ${v}`).join(" · ");
-$("foot").textContent = `${S.generatedAt} 기준 · ${S.pinned ? "공식값 고정" : "추정 (웹/모바일 사용은 안 보임)"} · ${prov || "요청 없음"}`;
+$("weekly").textContent = S.weeklyPct === null || S.weeklyPct === undefined
+  ? `${S.weeklyCatch.toLocaleString()} 토큰`
+  : `${Math.round(S.weeklyPct)}%  ·  ${S.weeklyCatch.toLocaleString()} 토큰`;
+$("foot").textContent = `${S.generatedAt} 기준`;
 
 // ---- 도트 화면 ----
 const cv = $("c"), g = cv.getContext("2d");
@@ -159,6 +164,7 @@ const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 const px = (x,y,w,h,c) => { g.fillStyle = c; g.fillRect(x|0,y|0,w,h); };
 
 // daylight 1 = 방금 시작, 0 = 리셋 직전
+const PILE_ROWS = [7,6,5,4,2];
 const d = S.isFishing ? S.daylight : 0;
 const DUSK = [26,26,58], DAY = [92,160,214];
 const SEA_DUSK = [10,18,44], SEA_DAY = [30,90,140];
@@ -205,17 +211,28 @@ function draw(t) {
     px(f.x + (f.dir>0 ? 3 : 1), y+1, 1, 1, "#0d1117"); // 눈
   }
 
-  // 배 + 낚싯대
+  // 배 + 낚싯대 (popup.py 와 같은 기하)
   const bob = Math.sin(t*0.003) * 1.2;
-  const bx = 22, by = SEA - 8 + bob;
-  px(bx, by+6, 34, 5, "#6b4423");
-  px(bx+3, by+4, 28, 2, "#8b5a2b");
-  px(bx+14, by-6, 2, 10, "#3d2a16");            // 사람 몸
-  px(bx+13, by-10, 4, 4, "#e8c39e");            // 머리
-  px(bx+17, by-9, 12, 1, "#a97b4f");            // 낚싯대
-  const lx = bx+29, ly = by-8;
-  px(lx, ly, 1, (SEA + 8 + bob) - ly, "#7d8590"); // 낚싯줄
-  px(lx-1, SEA + 7 + bob, 3, 3, "#f85149");       // 찌
+  const bx = 16, by = SEA - 8 + bob;
+  px(bx, by+6, 46, 5, "#6b4423");
+  px(bx+3, by+4, 40, 2, "#8b5a2b");
+  px(bx+4, by-6, 2, 10, "#3d2a16");
+  px(bx+3, by-10, 4, 4, "#e8c39e");
+  px(bx+7, by-9, 11, 1, "#a97b4f");
+  const lx = bx+18, ly = by-8;
+  px(lx, ly, 1, (SEA + 8 + bob) - ly, "#7d8590");
+  px(lx-1, SEA + 7 + bob, 3, 3, "#f85149");
+
+  // 잡은 물고기가 갑판에 쌓인다
+  const FISHC = ["#e3a447","#d96f4a","#7ee787","#79c0ff"];
+  let slot = 0;
+  outer: for (let row = 0; row < PILE_ROWS.length; row++) {
+    for (let col = 0; col < PILE_ROWS[row]; col++) {
+      if (slot >= S.onBoat) break outer;
+      px(bx + 22 + row*2 + col*4, by + 3 - row*2, 3, 2, FISHC[slot % 4]);
+      slot++;
+    }
+  }
 
   if (!S.isFishing) {
     g.fillStyle = "rgba(0,0,0,0.55)"; g.fillRect(0,0,W,H);

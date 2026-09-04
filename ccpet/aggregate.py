@@ -181,7 +181,11 @@ def app_usage(entries: list[UsageEntry], now: datetime) -> dict | None:
         return None
 
     boundary = plan_usage.last_reset_before(rows, now)
-    after = [e for e in entries if boundary is None or e.timestamp > boundary]
+    if boundary is None:
+        # 리셋 지점을 못 찾으면 창의 시작을 알 수 없다. 예전 첫 요청으로 창을 만들면
+        # 5시간을 한참 넘긴 엉뚱한 창이 나오므로 그냥 물러난다.
+        return None
+    after = [e for e in entries if e.timestamp > boundary]
     if not after:
         return None
     start = after[0].timestamp

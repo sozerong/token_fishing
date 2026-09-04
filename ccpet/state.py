@@ -117,6 +117,9 @@ class GameState:
     casts: int = 0
     """이번 창에서 던진 횟수 = 요청 수."""
 
+    on_boat: int = 0
+    """배 위에 쌓인 물고기. 고갈 모드에서 바다에서 사라진 만큼이다."""
+
     weekly_catch: int = 0
     """주간 리셋 이후 조업량. 공식 화면의 "주간 한도"에 대응한다. 0이면 미계산."""
 
@@ -170,9 +173,12 @@ def to_game_state(
     catch = w.input_tokens + w.output_tokens
     fill, fill_source = _fill(snap, catch, learned_limit)
 
+    on_boat = 0
     if mode == config.DEPLETION and fill is not None:
         # 고갈 모드: 바다가 가득 찬 상태에서 시작해 쓸수록 비어 간다.
+        # 바다에서 사라진 만큼이 배 위에 쌓인다 — 합은 항상 MAX_FISH_DRAWN.
         uncapped = round(MAX_FISH_DRAWN * (1.0 - fill))
+        on_boat = MAX_FISH_DRAWN - uncapped
     else:
         uncapped = catch // FISH_PER_TOKEN
     left = snap.time_to_reset
@@ -193,6 +199,7 @@ def to_game_state(
         pinned=snap.pinned,
         mode=mode,
         casts=w.entries,
+        on_boat=on_boat,
         fill=fill,
         fill_source=fill_source,
         used_percentage=snap.used_percentage,

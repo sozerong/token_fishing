@@ -151,6 +151,11 @@ def test_depletion_mode_empties_the_sea_as_you_spend():
         gs = to_game_state(s, mode=config.DEPLETION)
         assert gs.fish == expected, pct
         assert gs.fill_source == "official"
+        # 바다에서 사라진 만큼 배 위에 쌓인다. 총 마리 수는 보존된다.
+        assert gs.fish + gs.on_boat == MAX_FISH_DRAWN, pct
+
+    # 축적 모드에서는 배에 쌓이지 않는다
+    assert to_game_state(snap(w, now=utc(11)), mode=config.CATCH).on_boat == 0
 
 
 def test_catch_mode_is_unaffected_by_percentage():

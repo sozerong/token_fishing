@@ -94,7 +94,24 @@ def test_calibration_refuses_when_the_reading_is_too_small():
     assert plan_usage.calibrated_percentage(sample, 5_000, 9_000) is None
 
 
+def test_a_bad_read_keeps_the_last_good_samples():
+    """앱이 파일을 다시 쓰는 순간에 읽으면 반쯤 쓰인 JSON을 만난다.
+
+    그때 빈 목록을 돌려주면 리셋 경계를 못 찾아 화면이 통째로 엉뚱한 추정으로
+    떨어진다. 실제로 그 순간이 스크린샷에 잡혔다. 직전 값을 들고 있으면 끝난다.
+    """
+    path = write([(utc(17, 59), 79, 23)])
+    good = plan_usage.samples()
+    assert len(good) == 1
+
+    path.write_text("{ 반쯤 쓰인", encoding="utf-8")
+
+    assert plan_usage.samples() == good
+    assert plan_usage.latest() is not None
+
+
 def test_missing_file_is_not_an_error():
+    plan_usage._cache = []
     plan_usage.history_path = lambda: None
 
     assert plan_usage.samples() == []

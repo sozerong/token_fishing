@@ -59,15 +59,25 @@ class Sample:
     seven_day: float | None
 
 
+_cache: list[Sample] = []
+"""마지막으로 성공한 읽기.
+
+앱이 이 파일을 주기적으로 다시 쓴다. 그 순간에 읽으면 반쯤 쓰인 JSON을 만나
+빈 목록이 나오고, 그러면 리셋 경계를 못 찾아 화면이 통째로 엉뚱한 추정값으로
+떨어진다. 실제로 그 순간이 스크린샷에 잡혔다. 직전 값을 들고 있으면 끝난다."""
+
+
 def samples() -> list[Sample]:
-    """시간순 샘플. 읽을 수 없으면 빈 목록."""
+    """시간순 샘플. 읽기에 실패하면 마지막으로 성공한 값을 그대로 쓴다."""
+    global _cache
+
     path = history_path()
     if path is None:
         return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return []
+        return _cache
 
     rows = []
     for raw in data.get("samples") or []:
@@ -78,6 +88,9 @@ def samples() -> list[Sample]:
         u = raw.get("u") or {}
         rows.append(Sample(at, u.get("fh"), u.get("sd")))
     rows.sort(key=lambda s: s.at)
+    if not rows:
+        return _cache
+    _cache = rows
     return rows
 
 
