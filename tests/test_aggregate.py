@@ -276,6 +276,7 @@ def test_official_limits_beat_every_guess():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "limits.json"
         path.write_text(json.dumps({
+            "captured_at": utc(16, 45).isoformat(),   # 마지막 요청보다 뒤 → 아직 유효
             "rate_limits": {
                 "five_hour": {"used_percentage": 51, "resets_at": reset.timestamp()},
                 "seven_day": {"used_percentage": 20, "resets_at": reset.timestamp()},
@@ -301,6 +302,45 @@ def test_official_limits_beat_every_guess():
     assert snap.window.entries == 2, "공식 창 밖의 요청은 빠진다"
     assert snap.window.output_tokens == 30
     assert snap.time_to_reset == timedelta(hours=3, minutes=11)
+
+
+def test_percentage_is_dropped_once_more_tokens_are_spent():
+    """사용률을 낡게 만드는 건 흐른 시간이 아니라 그 뒤의 사용량이다.
+
+    캡처 이후 요청이 있었으면 그 퍼센트는 이미 낮게 잡힌 값이라 버린다.
+    반대로 놀고 있었다면 오래된 값이어도 그대로 정확하다.
+    """
+    import json
+    import tempfile
+
+    reset = utc(20, 11)
+
+    def snap_with(captured, entries):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "limits.json"
+            path.write_text(json.dumps({
+                "captured_at": captured.isoformat(),
+                "rate_limits": {
+                    "five_hour": {"used_percentage": 51,
+                                  "resets_at": reset.timestamp()},
+                },
+            }), encoding="utf-8")
+            original = statusline.STATE_PATH
+            statusline.STATE_PATH = path
+            try:
+                return snapshot(entries, now=utc(17, 0))
+            finally:
+                statusline.STATE_PATH = original
+
+    # 캡처(16:00) 이후 16:30에 요청 → 퍼센트는 낡았다
+    spent = snap_with(utc(16, 0), [entry("a", utc(16, 30), 10)])
+    assert spent.used_percentage is None
+    assert spent.window is not None, "리셋 시각은 그대로 살아 있어야 한다"
+    assert spent.window.end == reset
+
+    # 캡처(16:00) 이후 아무 요청 없음 → 오래돼도 여전히 정확하다
+    idle = snap_with(utc(16, 0), [entry("a", utc(15, 30), 10)])
+    assert idle.used_percentage == 51
 
 
 def test_expired_official_limits_are_ignored():

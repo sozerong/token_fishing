@@ -27,12 +27,14 @@ from .aggregate import (
     snapshot,
     weekly_totals,
 )
+from . import config
 from .state import GameState, to_game_state
 
 DEFAULT_OUT = Path("tokenfishing.html")
 
 
-def build_state() -> GameState:
+def build_state(settings: dict | None = None) -> GameState:
+    settings = settings or config.load()
     entries = collect_entries()
     now = datetime.now(timezone.utc)
     snap = snapshot(entries, now)
@@ -44,7 +46,13 @@ def build_state() -> GameState:
         else []
     )
     prov = dict(Counter(e.provenance for e in in_window))
-    return to_game_state(snap, prov, weekly_catch=weekly_totals(entries, now).catch)
+    return to_game_state(
+        snap,
+        prov,
+        weekly_catch=weekly_totals(entries, now).catch,
+        mode=settings["mode"],
+        plan=settings["plan"],
+    )
 
 
 def render(state: GameState, generated_at: datetime) -> str:

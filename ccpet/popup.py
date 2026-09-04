@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 
+from . import config
 from .state import GameState
 from .render import build_state
 
@@ -39,6 +40,7 @@ class Popup:
     def __init__(self, root: tk.Tk, state: GameState) -> None:
         self.root = root
         self.state = state
+        self.settings = config.load()
         self.frame = 0
         self.fish: list[dict] = []
         self._sync_fish()
@@ -66,9 +68,52 @@ class Popup:
             self.labels[key] = lbl
         self.labels["catch"].configure(fg="#7ee787", font=("Consolas", 13, "bold"))
 
+        # 토글 두 개. 누르면 바뀌고 바로 저장된다.
+        bar = tk.Frame(root, bg="#0d1117")
+        bar.pack(fill="x", padx=6, pady=(2, 6))
+        self.mode_btn = tk.Button(
+            bar, command=self._toggle_mode, font=("Consolas", 9),
+            bg="#21262d", fg="#c9d1d9", activebackground="#30363d",
+            relief="flat", borderwidth=0, padx=6, cursor="hand2",
+        )
+        self.mode_btn.pack(side="left", expand=True, fill="x", padx=(0, 3))
+        self.plan_btn = tk.Button(
+            bar, command=self._toggle_plan, font=("Consolas", 9),
+            bg="#21262d", fg="#c9d1d9", activebackground="#30363d",
+            relief="flat", borderwidth=0, padx=6, cursor="hand2",
+        )
+        self.plan_btn.pack(side="left", expand=True, fill="x", padx=(3, 0))
+        self._apply_buttons()
+
         self._apply_text()
         self._start_refresh()
         self._tick()
+
+    # ---- 토글 ----
+
+    def _apply_buttons(self) -> None:
+        mode = self.settings["mode"]
+        self.mode_btn.configure(text=f"모드: {config.MODE_LABELS[mode]}")
+        self.plan_btn.configure(text=f"플랜: {config.PLAN_LABELS[self.settings['plan']]}")
+        # 고갈 모드인데 채움 비율을 모르면 그릴 근거가 없다. 플랜을 고르라고 알린다.
+        needs_plan = mode == config.DEPLETION and self.state.fill is None
+        self.plan_btn.configure(fg="#d29922" if needs_plan else "#c9d1d9")
+
+    def _toggle_mode(self) -> None:
+        self.settings["mode"] = config.next_in(config.MODES, self.settings["mode"])
+        self._commit_settings()
+
+    def _toggle_plan(self) -> None:
+        self.settings["plan"] = config.next_in(config.PLANS, self.settings["plan"])
+        self._commit_settings()
+
+    def _commit_settings(self) -> None:
+        config.save(self.settings)
+        self.state = build_state(self.settings)
+        self.fish = []              # 마리 수가 확 바뀌므로 새로 만든다
+        self._sync_fish()
+        self._apply_buttons()
+        self._apply_text()
 
     # ---- 데이터 ----
 
@@ -79,7 +124,7 @@ class Popup:
                     return
                 try:
                     # 참조 하나를 통째로 갈아끼운다. GIL 덕에 락이 필요 없다.
-                    self.state = build_state()
+                    self.state = build_state(self.settings)
                 except Exception:  # noqa: BLE001
                     # 파일이 쓰이는 중이라 읽기가 실패할 수 있다. 다음 주기에 다시 시도한다.
                     pass
@@ -114,9 +159,14 @@ class Popup:
         self.labels["catch"].configure(
             text=f"{s.catch:,} 토큰" if s.is_fishing else "— 조업 종료"
         )
-        self.labels["tier"].configure(
-            text=f"{s.tier}" + (f"  (물고기 {s.fish_uncapped}마리)" if s.fish_uncapped else "")
-        )
+        if s.mode == config.DEPLETION and s.fill is not None:
+            # 고갈 모드에서 화면의 물고기는 "잡은 수"가 아니라 "남은 바다"다.
+            tier = f"{s.tier}  ·  바다에 {s.fish}마리 남음"
+            if s.fill_source == "plan":
+                tier += "  (플랜 근사)"
+        else:
+            tier = s.tier + (f"  (물고기 {s.fish_uncapped}마리)" if s.fish_uncapped else "")
+        self.labels["tier"].configure(text=tier)
         self.labels["bite"].configure(text=f"입질 {s.bite} · {s.bite_per_min:,.0f} 토큰/분")
         # 추정값을 확실한 척 보여주지 않는다. ~ 가 붙어 있으면 틀릴 수 있다는 뜻.
         mark = "" if s.pinned else "~"
@@ -218,7 +268,7 @@ def main() -> int:
         return install()
 
     root = tk.Tk()
-    Popup(root, build_state())
+    Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다
     root.mainloop()
     return 0
 

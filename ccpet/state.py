@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import config
 from .aggregate import WINDOW, Snapshot
 
 # 튜닝 손잡이. 실측 감각으로 잡은 값이라 써 보고 고치라고 밖에 빼뒀다.
@@ -86,6 +87,16 @@ class GameState:
 
     weekly_percentage: float | None = None
 
+    mode: str = config.CATCH
+    """CATCH면 쓸수록 물고기가 늘고, DEPLETION이면 쓸수록 줄어든다."""
+
+    fill: float | None = None
+    """창을 얼마나 채웠나 (0~1). 공식 사용률이 있으면 그 값, 없으면 플랜 눈금 기준.
+    둘 다 없으면 None — 고갈 모드는 이 값이 있어야 의미가 있다."""
+
+    fill_source: str = "none"
+    """"official" | "plan" | "none". 이 숫자가 어디서 왔는지 화면에서 밝힌다."""
+
     weekly_catch: int = 0
     """주간 리셋 이후 조업량. 공식 화면의 "주간 한도"에 대응한다. 0이면 미계산."""
 
@@ -96,10 +107,22 @@ class GameState:
     """윈도우 안 요청들의 provenance 분포. 숫자의 출처를 화면에서도 숨기지 않는다."""
 
 
+def _fill(snap: Snapshot, catch: int, plan: str) -> tuple[float | None, str]:
+    """창을 얼마나 채웠는지 0~1로. 공식 수치가 있으면 무조건 그쪽."""
+    if snap.used_percentage is not None:
+        return max(0.0, min(1.0, snap.used_percentage / 100)), "official"
+    limit = config.PLAN_CATCH_LIMITS.get(plan)
+    if limit:
+        return max(0.0, min(1.0, catch / limit)), "plan"
+    return None, "none"
+
+
 def to_game_state(
     snap: Snapshot,
     provenance: dict[str, int] | None = None,
     weekly_catch: int = 0,
+    mode: str = config.CATCH,
+    plan: str = "auto",
 ) -> GameState:
     w = snap.window
     if w is None:
@@ -114,6 +137,7 @@ def to_game_state(
             minutes_left=None,
             daylight=0.0,
             pinned=snap.pinned,
+            mode=mode,
             used_percentage=snap.used_percentage,
             weekly_percentage=snap.weekly_percentage,
             weekly_catch=weekly_catch,
@@ -122,7 +146,13 @@ def to_game_state(
         )
 
     catch = w.input_tokens + w.output_tokens
-    uncapped = catch // FISH_PER_TOKEN
+    fill, fill_source = _fill(snap, catch, plan)
+
+    if mode == config.DEPLETION and fill is not None:
+        # 고갈 모드: 바다가 가득 찬 상태에서 시작해 쓸수록 비어 간다.
+        uncapped = round(MAX_FISH_DRAWN * (1.0 - fill))
+    else:
+        uncapped = catch // FISH_PER_TOKEN
     left = snap.time_to_reset
     minutes_left = int(left.total_seconds() // 60) if left else 0
 
@@ -138,6 +168,9 @@ def to_game_state(
         # 남은 시간이 많을수록 해가 높다.
         daylight=max(0.0, min(1.0, (left.total_seconds() / WINDOW.total_seconds()) if left else 0.0)),
         pinned=snap.pinned,
+        mode=mode,
+        fill=fill,
+        fill_source=fill_source,
         used_percentage=snap.used_percentage,
         weekly_percentage=snap.weekly_percentage,
         weekly_catch=weekly_catch,

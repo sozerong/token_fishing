@@ -185,8 +185,15 @@ def official_limits(now: datetime) -> dict | None:
         return None
     if reset_at <= now:
         return None
+
+    try:
+        captured_at = datetime.fromisoformat(saved["captured_at"])
+    except (KeyError, TypeError, ValueError):
+        captured_at = None
+
     return {
         "reset_at": reset_at,
+        "captured_at": captured_at,
         "used_percentage": five.get("used_percentage"),
         "weekly": (saved.get("rate_limits") or {}).get("seven_day") or {},
     }
@@ -339,13 +346,23 @@ def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snap
     official = official_limits(now)
     if official is not None:
         weekly = official["weekly"]
+
+        # 사용률이 아직 유효한가. 낡게 만드는 건 흐른 시간이 아니라 **그 뒤의 사용량**이다.
+        # 놀고 있었다면 몇 시간 전 값이어도 여전히 정확하다. 반대로 그 사이에 요청이
+        # 있었으면 몇 분 전 값이라도 이미 낮게 잡힌 값이다.
+        captured = official["captured_at"]
+        used_since = (
+            any(e.timestamp > captured for e in entries) if captured else True
+        )
+        pct = None if used_since else official["used_percentage"]
+
         return Snapshot(
             window=anchored_window(entries, official["reset_at"]),
             tokens_per_minute=rate,
             now=now,
             pinned=True,
-            used_percentage=official["used_percentage"],
-            weekly_percentage=weekly.get("used_percentage"),
+            used_percentage=pct,
+            weekly_percentage=None if used_since else weekly.get("used_percentage"),
             weekly_reset_at=(
                 datetime.fromtimestamp(float(weekly["resets_at"]), timezone.utc)
                 if weekly.get("resets_at") is not None

@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ccpet.aggregate import Snapshot, Window  # noqa: E402
+from ccpet import config  # noqa: E402
 from ccpet.state import FISH_PER_TOKEN, MAX_FISH_DRAWN, to_game_state  # noqa: E402
 
 
@@ -101,6 +102,53 @@ def test_daylight_never_leaves_zero_to_one():
     for hour in (9, 12, 14, 20):
         gs = to_game_state(snap(w, now=utc(hour)))
         assert 0.0 <= gs.daylight <= 1.0, hour
+
+
+def test_depletion_mode_empties_the_sea_as_you_spend():
+    """고갈 모드: 바다가 가득 찬 상태로 시작해 쓸수록 비어 간다."""
+    w = window(inp=0, out=100)
+
+    empty = to_game_state(snap(w, now=utc(11)), mode=config.DEPLETION)
+    # 공식 사용률이 없으면 채움 비율을 모른다 → 고갈로 그릴 근거가 없다
+    assert empty.fill is None
+    assert empty.fill_source == "none"
+
+    for pct, expected in ((0, MAX_FISH_DRAWN), (50, MAX_FISH_DRAWN // 2), (100, 0)):
+        s = Snapshot(window=w, tokens_per_minute=0.0, now=utc(11),
+                     pinned=True, used_percentage=pct)
+        gs = to_game_state(s, mode=config.DEPLETION)
+        assert gs.fish == expected, pct
+        assert gs.fill_source == "official"
+
+
+def test_catch_mode_is_unaffected_by_percentage():
+    """축적 모드는 예전 그대로 — 조업량만큼 물고기가 쌓인다."""
+    w = window(inp=0, out=FISH_PER_TOKEN * 7)
+    s = Snapshot(window=w, tokens_per_minute=0.0, now=utc(11),
+                 pinned=True, used_percentage=90)
+
+    gs = to_game_state(s, mode=config.CATCH)
+
+    assert gs.fish == 7, "사용률이 높아도 축적 모드는 잡은 만큼 센다"
+
+
+def test_plan_fills_in_when_official_percentage_is_missing():
+    """공식 수치가 없을 때만 플랜 눈금을 쓴다. 있으면 공식이 이긴다."""
+    catch = config.PLAN_CATCH_LIMITS["pro"] // 4        # Pro 기준 25%
+    w = window(inp=0, out=catch)
+
+    by_plan = to_game_state(snap(w, now=utc(11)), mode=config.DEPLETION, plan="pro")
+    assert by_plan.fill_source == "plan"
+    assert abs(by_plan.fill - 0.25) < 0.01
+    assert by_plan.fish == round(MAX_FISH_DRAWN * 0.75)
+
+    official = to_game_state(
+        Snapshot(window=w, tokens_per_minute=0.0, now=utc(11),
+                 pinned=True, used_percentage=80),
+        mode=config.DEPLETION, plan="pro",
+    )
+    assert official.fill_source == "official", "공식 수치가 플랜 눈금을 이긴다"
+    assert abs(official.fill - 0.80) < 0.01
 
 
 def main() -> int:
