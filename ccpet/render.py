@@ -57,7 +57,6 @@ def build_state(settings: dict | None = None) -> GameState:
         prov,
         weekly_catch=weekly_totals(entries, now).catch,
         mode=settings["mode"],
-        plan=settings["plan"],
         learned_limit=settings.get("learned_limit"),
     )
 
@@ -74,6 +73,7 @@ def render(state: GameState, generated_at: datetime) -> str:
         "minutesLeft": state.minutes_left,
         "daylight": state.daylight,
         "weeklyCatch": state.weekly_catch,
+        "casts": state.casts,
         "fill": state.fill,
         "fillSource": state.fill_source,
         "pinned": state.pinned,

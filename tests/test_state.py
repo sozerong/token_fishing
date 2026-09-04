@@ -90,6 +90,13 @@ def test_no_active_window_means_fishing_is_over():
     assert gs.daylight == 0.0
 
 
+def test_casts_counts_requests_in_the_window():
+    """캐스팅 = 이번 창에서 던진 횟수 = 요청 수."""
+    gs = to_game_state(snap(window(inp=1, out=2, entries=282)))
+    assert gs.casts == 282
+    assert to_game_state(snap(None)).casts == 0
+
+
 def test_provenance_is_carried_to_the_screen():
     """숫자의 출처를 화면에서도 숨기지 않는다."""
     gs = to_game_state(
@@ -134,7 +141,7 @@ def test_depletion_mode_empties_the_sea_as_you_spend():
     w = window(inp=0, out=100)
 
     empty = to_game_state(snap(w, now=utc(11)), mode=config.DEPLETION)
-    # 공식 사용률이 없으면 채움 비율을 모른다 → 고갈로 그릴 근거가 없다
+    # 공식 수치도 학습값도 없으면 채움 비율을 모른다 → 고갈로 그릴 근거가 없다
     assert empty.fill is None
     assert empty.fill_source == "none"
 
@@ -157,30 +164,8 @@ def test_catch_mode_is_unaffected_by_percentage():
     assert gs.fish == 7, "사용률이 높아도 축적 모드는 잡은 만큼 센다"
 
 
-def test_plan_fills_in_when_official_percentage_is_missing():
-    """공식 수치가 없을 때만 플랜 눈금을 쓴다. 있으면 공식이 이긴다."""
-    catch = config.PLAN_CATCH_LIMITS["pro"] // 4        # Pro 기준 25%
-    w = window(inp=0, out=catch)
-
-    by_plan = to_game_state(snap(w, now=utc(11)), mode=config.DEPLETION, plan="pro")
-    assert by_plan.fill_source == "plan"
-    assert abs(by_plan.fill - 0.25) < 0.01
-    assert by_plan.fish == round(MAX_FISH_DRAWN * 0.75)
-
-    official = to_game_state(
-        Snapshot(window=w, tokens_per_minute=0.0, now=utc(11),
-                 pinned=True, used_percentage=80),
-        mode=config.DEPLETION, plan="pro",
-    )
-    assert official.fill_source == "official", "공식 수치가 플랜 눈금을 이긴다"
-    assert abs(official.fill - 0.80) < 0.01
-
-
-def test_learned_limit_beats_the_plan_table():
-    """공식 사용률을 한 번 보면 이 계정의 한도를 재서 기억한다.
-
-    표에 박아둔 근사치보다 실제로 관측한 값이 낫다. 플랜을 안 골라도 된다.
-    """
+def test_learned_limit_fills_in_when_official_is_missing():
+    """공식 사용률을 한 번 보면 이 계정의 한도를 재서 기억하고, 그 뒤로 쓴다."""
     settings = dict(config.DEFAULTS)
 
     # 공식 75%인 순간의 조업량이 225,478이었다면 한도는 약 300,637
@@ -195,14 +180,20 @@ def test_learned_limit_beats_the_plan_table():
     # 잔떨림으로 매번 다시 쓰지 않는다
     assert config.learn_limit(settings, 225_500, 75.0) is False
 
-    # 배운 값이 플랜 표를 이긴다
+    # 공식 수치가 없을 때 학습값으로 채운다
     w = window(inp=0, out=150_000)
-    gs = to_game_state(
-        snap(w, now=utc(11)), plan="max20",
-        learned_limit=settings["learned_limit"],
-    )
+    gs = to_game_state(snap(w, now=utc(11)), learned_limit=settings["learned_limit"])
     assert gs.fill_source == "learned"
     assert abs(gs.fill - 150_000 / settings["learned_limit"]) < 0.01
+
+    # 공식 수치가 있으면 그쪽이 이긴다
+    official = to_game_state(
+        Snapshot(window=w, tokens_per_minute=0.0, now=utc(11),
+                 pinned=True, used_percentage=80),
+        learned_limit=settings["learned_limit"],
+    )
+    assert official.fill_source == "official"
+    assert abs(official.fill - 0.80) < 0.01
 
 
 def main() -> int:

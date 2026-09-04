@@ -58,12 +58,11 @@ class Popup:
         self.canvas.pack()
 
         self.labels: dict[str, tk.Label] = {}
-        for key in ("catch", "tier", "bite", "left", "weekly", "foot"):
-            small = key == "foot"
+        for key in ("catch", "tier", "bite", "left", "weekly"):
             lbl = tk.Label(
                 root, anchor="w", justify="left",
-                bg="#0d1117", fg="#6e7681" if small else "#c9d1d9",
-                font=("Consolas", 8 if small else 10, "bold" if key == "catch" else "normal"),
+                bg="#0d1117", fg="#c9d1d9",
+                font=("Consolas", 10, "bold" if key == "catch" else "normal"),
             )
             lbl.pack(fill="x", padx=6)
             self.labels[key] = lbl
@@ -77,13 +76,7 @@ class Popup:
             bg="#21262d", fg="#c9d1d9", activebackground="#30363d",
             relief="flat", borderwidth=0, padx=6, cursor="hand2",
         )
-        self.mode_btn.pack(side="left", expand=True, fill="x", padx=(0, 3))
-        self.plan_btn = tk.Button(
-            bar, command=self._toggle_plan, font=("Consolas", 9),
-            bg="#21262d", fg="#c9d1d9", activebackground="#30363d",
-            relief="flat", borderwidth=0, padx=6, cursor="hand2",
-        )
-        self.plan_btn.pack(side="left", expand=True, fill="x", padx=(3, 0))
+        self.mode_btn.pack(fill="x")
         self._apply_buttons()
 
         self._apply_text()
@@ -93,19 +86,10 @@ class Popup:
     # ---- 토글 ----
 
     def _apply_buttons(self) -> None:
-        mode = self.settings["mode"]
-        self.mode_btn.configure(text=f"모드: {config.MODE_LABELS[mode]}")
-        self.plan_btn.configure(text=f"플랜: {config.PLAN_LABELS[self.settings['plan']]}")
-        # 고갈 모드인데 채움 비율을 모르면 그릴 근거가 없다. 플랜을 고르라고 알린다.
-        needs_plan = mode == config.DEPLETION and self.state.fill is None
-        self.plan_btn.configure(fg="#d29922" if needs_plan else "#c9d1d9")
+        self.mode_btn.configure(text=f"모드: {config.MODE_LABELS[self.settings['mode']]}")
 
     def _toggle_mode(self) -> None:
         self.settings["mode"] = config.next_in(config.MODES, self.settings["mode"])
-        self._commit_settings()
-
-    def _toggle_plan(self) -> None:
-        self.settings["plan"] = config.next_in(config.PLANS, self.settings["plan"])
         self._commit_settings()
 
     def _commit_settings(self) -> None:
@@ -173,7 +157,9 @@ class Popup:
             )
         # 마리 수는 화면에 그려져 있다. 숫자로 또 적지 않는다.
         self.labels["tier"].configure(text=s.tier)
-        self.labels["bite"].configure(text=f"입질 {s.bite} · {s.bite_per_min:,.0f} 토큰/분")
+        self.labels["bite"].configure(
+            text=f"입질 {s.bite} · 캐스팅 {s.casts:,}회"
+        )
         # 추정값을 확실한 척 보여주지 않는다. ~ 가 붙어 있으면 틀릴 수 있다는 뜻.
         mark = "" if s.pinned else "~"
         self.labels["left"].configure(
@@ -181,13 +167,11 @@ class Popup:
             else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
         )
         self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
-        weekly = (f"주간 {s.weekly_percentage:.0f}%  ·  {s.weekly_catch:,} 토큰"
-                  if s.weekly_percentage is not None
-                  else f"주간 {s.weekly_catch:,} 토큰")
-        self.labels["weekly"].configure(text=weekly)
-        # 출처 설명은 빼고 숫자의 신뢰도만 남긴다. 어림값은 앞의 ~ 로 이미 보인다.
-        prov = " · ".join(f"{k} {v}" for k, v in s.provenance.items())
-        self.labels["foot"].configure(text=prov)
+        self.labels["weekly"].configure(
+            text=f"주간 {s.weekly_percentage:.0f}%  ·  {s.weekly_catch:,} 토큰"
+            if s.weekly_percentage is not None
+            else f"주간 {s.weekly_catch:,} 토큰"
+        )
 
     # ---- 그리기 ----
 

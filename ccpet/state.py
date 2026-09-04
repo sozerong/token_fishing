@@ -112,7 +112,10 @@ class GameState:
     둘 다 없으면 None — 고갈 모드는 이 값이 있어야 의미가 있다."""
 
     fill_source: str = "none"
-    """"official" | "learned" | "plan" | "none". 어디서 온 숫자인지 화면에서 밝힌다."""
+    """"official" | "learned" | "none". 어디서 온 숫자인지 화면에서 밝힌다."""
+
+    casts: int = 0
+    """이번 창에서 던진 횟수 = 요청 수."""
 
     weekly_catch: int = 0
     """주간 리셋 이후 조업량. 공식 화면의 "주간 한도"에 대응한다. 0이면 미계산."""
@@ -125,20 +128,13 @@ class GameState:
 
 
 def _fill(
-    snap: Snapshot, catch: int, plan: str, learned_limit: int | None = None
+    snap: Snapshot, catch: int, learned_limit: int | None
 ) -> tuple[float | None, str]:
-    """창을 얼마나 채웠는지 0~1로.
-
-    우선순위: 공식 수치 > 관측으로 배운 한도 > 플랜 표.
-    배운 값이 표보다 앞서는 이유는 이 계정에서 실제로 재본 값이기 때문이다.
-    """
+    """창을 얼마나 채웠는지 0~1로. 공식 수치가 있으면 그것, 없으면 학습한 한도."""
     if snap.used_percentage is not None:
         return max(0.0, min(1.0, snap.used_percentage / 100)), "official"
     if learned_limit:
         return max(0.0, min(1.0, catch / learned_limit)), "learned"
-    limit = config.PLAN_CATCH_LIMITS.get(plan)
-    if limit:
-        return max(0.0, min(1.0, catch / limit)), "plan"
     return None, "none"
 
 
@@ -147,7 +143,6 @@ def to_game_state(
     provenance: dict[str, int] | None = None,
     weekly_catch: int = 0,
     mode: str = config.CATCH,
-    plan: str = "auto",
     learned_limit: int | None = None,
 ) -> GameState:
     w = snap.window
@@ -164,6 +159,7 @@ def to_game_state(
             daylight=0.0,
             pinned=snap.pinned,
             mode=mode,
+            casts=0,
             used_percentage=snap.used_percentage,
             weekly_percentage=snap.weekly_percentage,
             weekly_catch=weekly_catch,
@@ -172,7 +168,7 @@ def to_game_state(
         )
 
     catch = w.input_tokens + w.output_tokens
-    fill, fill_source = _fill(snap, catch, plan, learned_limit)
+    fill, fill_source = _fill(snap, catch, learned_limit)
 
     if mode == config.DEPLETION and fill is not None:
         # 고갈 모드: 바다가 가득 찬 상태에서 시작해 쓸수록 비어 간다.
@@ -196,6 +192,7 @@ def to_game_state(
         daylight=max(0.0, min(1.0, (left.total_seconds() / WINDOW.total_seconds()) if left else 0.0)),
         pinned=snap.pinned,
         mode=mode,
+        casts=w.entries,
         fill=fill,
         fill_source=fill_source,
         used_percentage=snap.used_percentage,
