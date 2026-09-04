@@ -37,13 +37,30 @@ BITE_LEVELS = (
 CATCH_TIERS = (
     (0, "빈 바구니"),
     (5_000, "잔챙이"),
-    (50_000, "제법"),
-    (200_000, "월척"),
-    (1_000_000, "대물"),
+    (50_000, "반 바구니"),
+    (200_000, "한 바구니"),
+    (1_000_000, "만선"),
 )
+"""조업량(토큰) → 등급. 사용률을 모를 때만 쓰는 눈금이다.
+
+낚시 용어를 쓰되 **설명이 필요한 단어는 쓰지 않는다.** 한때 "월척"(한 자 넘는 물고기)을
+썼는데 무슨 뜻이냐는 질문을 받았다. 뜻을 알아야 읽히는 라벨은 실패한 라벨이다."""
+
+FILL_TIERS = (
+    (0.0, "빈 바구니"),
+    (0.01, "잔챙이"),
+    (0.20, "반 바구니"),
+    (0.50, "한 바구니"),
+    (0.80, "만선"),
+)
+"""사용률(0~1) → 등급. 사용률을 알면 이쪽이 맞다.
+
+절대 토큰 수로 등급을 매기면 플랜에 따라 뜻이 달라진다. Pro의 20만 토큰과
+Max 20x의 20만 토큰은 전혀 다른 상황인데 같은 등급이 나온다. 채운 비율로 매기면
+어느 플랜에서든 "얼마나 찼나"를 똑같이 뜻한다."""
 
 
-def _level(value: float, table: tuple[tuple[int, str], ...]) -> str:
+def _level(value: float, table: tuple[tuple[float, str], ...]) -> str:
     label = table[0][1]
     for threshold, name in table:
         if value >= threshold:
@@ -161,7 +178,8 @@ def to_game_state(
         catch=catch,
         fish=min(uncapped, MAX_FISH_DRAWN),
         fish_uncapped=uncapped,
-        tier=_level(catch, CATCH_TIERS),
+        # 사용률을 알면 비율로, 모르면 절대량으로 등급을 매긴다.
+        tier=_level(fill, FILL_TIERS) if fill is not None else _level(catch, CATCH_TIERS),
         bite=_level(snap.tokens_per_minute, BITE_LEVELS),
         bite_per_min=snap.tokens_per_minute,
         minutes_left=minutes_left,

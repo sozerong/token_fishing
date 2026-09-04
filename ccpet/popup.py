@@ -156,9 +156,19 @@ class Popup:
 
     def _apply_text(self) -> None:
         s = self.state
-        self.labels["catch"].configure(
-            text=f"{s.catch:,} 토큰" if s.is_fishing else "— 조업 종료"
-        )
+        if not s.is_fishing:
+            self.labels["catch"].configure(text="— 조업 종료", fg="#6e7681")
+        elif s.fill is None:
+            # 사용률을 모른다. 퍼센트를 지어내지 않고 절대량만 보여준다.
+            self.labels["catch"].configure(text=f"{s.catch:,} 토큰", fg="#7ee787")
+        else:
+            # ~ 는 플랜 눈금으로 어림한 값이라는 표시. 공식 수치면 안 붙는다.
+            mark = "" if s.fill_source == "official" else "~"
+            pct = s.fill * 100
+            self.labels["catch"].configure(
+                text=f"{mark}{pct:.0f}%  ·  {s.catch:,} 토큰",
+                fg="#f85149" if pct >= 90 else "#d29922" if pct >= 70 else "#7ee787",
+            )
         if s.mode == config.DEPLETION and s.fill is not None:
             # 고갈 모드에서 화면의 물고기는 "잡은 수"가 아니라 "남은 바다"다.
             tier = f"{s.tier}  ·  바다에 {s.fish}마리 남음"
@@ -175,10 +185,6 @@ class Popup:
             else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
         )
         self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
-        if s.used_percentage is not None:
-            self.labels["catch"].configure(
-                text=f"{s.used_percentage:.0f}%  ·  {s.catch:,} 토큰"
-            )
         weekly = (f"주간 {s.weekly_percentage:.0f}%  ·  {s.weekly_catch:,} 토큰"
                   if s.weekly_percentage is not None
                   else f"주간 {s.weekly_catch:,} 토큰")

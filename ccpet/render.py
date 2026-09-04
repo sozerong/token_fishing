@@ -67,6 +67,8 @@ def render(state: GameState, generated_at: datetime) -> str:
         "minutesLeft": state.minutes_left,
         "daylight": state.daylight,
         "weeklyCatch": state.weekly_catch,
+        "fill": state.fill,
+        "fillSource": state.fill_source,
         "pinned": state.pinned,
         "tokens": state.tokens,
         "provenance": state.provenance,
@@ -129,7 +131,9 @@ const S = __STATE__;
 
 // ---- 수치 표시 ----
 const $ = id => document.getElementById(id);
-$("catch").textContent = S.isFishing ? S.catch.toLocaleString() + " 토큰" : "—";
+$("catch").textContent = !S.isFishing ? "—"
+  : S.fill === null ? S.catch.toLocaleString() + " 토큰"
+  : `${S.fillSource === "official" ? "" : "~"}${Math.round(S.fill*100)}%  ·  ${S.catch.toLocaleString()} 토큰`;
 $("tier").textContent  = S.tier + (S.fishUncapped ? `  (물고기 ${S.fishUncapped}마리)` : "");
 $("bite").textContent  = `${S.bite} · ${Math.round(S.bitePerMin).toLocaleString()} 토큰/분`;
 $("left").textContent  = S.minutesLeft === null ? "조업 종료"

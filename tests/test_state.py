@@ -51,11 +51,12 @@ def test_fish_count_is_capped_for_drawing_but_truth_is_kept():
 
 
 def test_tier_and_bite_thresholds():
+    """사용률을 모를 때는 절대 토큰으로 등급을 매긴다."""
     assert to_game_state(snap(window(0, 0))).tier == "빈 바구니"
     assert to_game_state(snap(window(0, 10_000))).tier == "잔챙이"
-    assert to_game_state(snap(window(0, 60_000))).tier == "제법"
-    assert to_game_state(snap(window(0, 250_000))).tier == "월척"
-    assert to_game_state(snap(window(0, 2_000_000))).tier == "대물"
+    assert to_game_state(snap(window(0, 60_000))).tier == "반 바구니"
+    assert to_game_state(snap(window(0, 250_000))).tier == "한 바구니"
+    assert to_game_state(snap(window(0, 2_000_000))).tier == "만선"
 
     assert to_game_state(snap(window(0, 1), per_min=0)).bite == "잠잠"
     assert to_game_state(snap(window(0, 1), per_min=600)).bite == "잔잔"
@@ -102,6 +103,30 @@ def test_daylight_never_leaves_zero_to_one():
     for hour in (9, 12, 14, 20):
         gs = to_game_state(snap(w, now=utc(hour)))
         assert 0.0 <= gs.daylight <= 1.0, hour
+
+
+def test_tier_follows_the_percentage_when_it_is_known():
+    """사용률을 알면 비율로 등급을 매긴다.
+
+    절대량으로 매기면 플랜에 따라 뜻이 달라진다 — Pro의 20만 토큰과 Max 20x의
+    20만 토큰은 전혀 다른 상황인데 같은 등급이 나온다.
+    """
+    w = window(inp=0, out=200_000)   # 토큰만 보면 "한 바구니"
+
+    def tier_at(pct):
+        return to_game_state(
+            Snapshot(window=w, tokens_per_minute=0.0, now=utc(11),
+                     pinned=True, used_percentage=pct)
+        ).tier
+
+    assert tier_at(0) == "빈 바구니"
+    assert tier_at(10) == "잔챙이"
+    assert tier_at(35) == "반 바구니"
+    assert tier_at(65) == "한 바구니"
+    assert tier_at(95) == "만선"
+
+    # 같은 토큰 수인데 사용률이 낮으면 등급도 낮다
+    assert tier_at(5) != to_game_state(snap(w)).tier
 
 
 def test_depletion_mode_empties_the_sea_as_you_spend():
