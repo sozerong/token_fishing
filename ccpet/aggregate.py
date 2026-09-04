@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import statusline
 from .parser import UsageEntry, parse_file
 from .paths import session_files
 
@@ -164,8 +165,38 @@ def weekly_totals(entries: Iterable[UsageEntry], now: datetime) -> Totals:
 RESET_ENV = "TOKENFISHING_RESET_AT"
 
 
+def official_limits(now: datetime) -> dict | None:
+    """상태줄 훅이 받아둔 공식 사용량. 없으면 None.
+
+    Claude Code가 상태줄 명령에 넘기는 `rate_limits`를 그대로 저장한 값이다.
+    추정이 아니라 계정 기준 공식 수치라, 웹·모바일 사용량까지 반영돼 있다.
+    창이 이미 지났으면 무시한다 (Claude Code도 지난 창은 빼고 보낸다).
+    """
+    saved = statusline.load()
+    if not saved:
+        return None
+    five = (saved.get("rate_limits") or {}).get("five_hour") or {}
+    resets = five.get("resets_at")
+    if resets is None:
+        return None
+    try:
+        reset_at = datetime.fromtimestamp(float(resets), timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+    if reset_at <= now:
+        return None
+    return {
+        "reset_at": reset_at,
+        "used_percentage": five.get("used_percentage"),
+        "weekly": (saved.get("rate_limits") or {}).get("seven_day") or {},
+    }
+
+
 def pinned_reset(now: datetime) -> datetime | None:
-    """공식 UI에서 읽은 리셋 시각. 없으면 None.
+    """수동으로 꽂은 리셋 시각. 없으면 None.
+
+    상태줄 훅을 못 쓰는 경우(구독이 아니거나 훅 설치 전)를 위한 수단이다.
+    훅이 있으면 그쪽이 우선한다.
 
     JSONL만으로는 윈도우 경계를 알 수 없는 경우가 있다 — claude.ai 웹이나 모바일에서
     쓴 사용량도 같은 5시간 한도를 먹지만 여기엔 흔적이 안 남는다. 그런 사용이 창을
@@ -282,7 +313,13 @@ class Snapshot:
     tokens_per_minute: float
     now: datetime
     pinned: bool = False
-    """리셋 시각이 공식 UI에서 온 값인가. False면 JSONL로 추정한 값이라 틀릴 수 있다."""
+    """리셋 시각이 확정값인가. False면 JSONL로 추정한 값이라 틀릴 수 있다."""
+
+    used_percentage: float | None = None
+    """5시간 창 사용률(0~100). 공식 수치가 있을 때만 채워진다. 추정하지 않는다."""
+
+    weekly_percentage: float | None = None
+    weekly_reset_at: datetime | None = None
 
     @property
     def total_tokens(self) -> int:
@@ -296,19 +333,40 @@ class Snapshot:
 def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snapshot:
     now = now or datetime.now(timezone.utc)
     entries = list(entries)
+    rate = burn_rate(entries, now)
 
+    # 1순위: 상태줄 훅이 받아둔 공식 수치.
+    official = official_limits(now)
+    if official is not None:
+        weekly = official["weekly"]
+        return Snapshot(
+            window=anchored_window(entries, official["reset_at"]),
+            tokens_per_minute=rate,
+            now=now,
+            pinned=True,
+            used_percentage=official["used_percentage"],
+            weekly_percentage=weekly.get("used_percentage"),
+            weekly_reset_at=(
+                datetime.fromtimestamp(float(weekly["resets_at"]), timezone.utc)
+                if weekly.get("resets_at") is not None
+                else None
+            ),
+        )
+
+    # 2순위: 손으로 꽂은 리셋 시각.
     reset = pinned_reset(now)
     if reset is not None and now < reset:
         return Snapshot(
             window=anchored_window(entries, reset),
-            tokens_per_minute=burn_rate(entries, now),
+            tokens_per_minute=rate,
             now=now,
             pinned=True,
         )
 
+    # 3순위: JSONL로 추정. 보이지 않는 사용량이 있으면 어긋난다.
     return Snapshot(
         window=current_window(build_windows(entries), now),
-        tokens_per_minute=burn_rate(entries, now),
+        tokens_per_minute=rate,
         now=now,
     )
 
@@ -327,6 +385,8 @@ def _main() -> None:
 
     print(f"요청 {len(entries)}개, 윈도우 {len(build_windows(entries))}개")
     print()
+    if snap.used_percentage is not None:
+        print(f"사용률       {snap.used_percentage:.0f}%  (공식 수치)")
     if snap.window is None:
         print("활성 윈도우 없음 (마지막 블록이 이미 리셋됨)")
     else:
@@ -369,9 +429,6 @@ def _main() -> None:
           f"전체 {life.total_tokens:,}")
     print()
     print(f"provenance   {dict(prov)}")
-    print()
-    print("한도 퍼센트와 소진 예측은 내지 않는다. 한도를 추측해야 나오는 값이고,")
-    print("추측한 값은 실제로 틀린다 — 레퍼런스는 82.6%라 했고 공식 화면은 35%였다.")
 
 
 if __name__ == "__main__":

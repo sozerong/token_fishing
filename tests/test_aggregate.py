@@ -23,9 +23,14 @@ from ccpet.aggregate import (  # noqa: E402
     weekly_start,
     weekly_totals,
 )
+from ccpet import statusline  # noqa: E402
 from ccpet.parser import UsageEntry, parse_file  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# 테스트는 이 기계의 상태에 의존하면 안 된다. 상태줄 훅이 남긴 실제 공식 수치
+# 파일이 있으면 snapshot()이 그걸 우선하므로, 없는 경로로 돌려놓는다.
+statusline.STATE_PATH = Path(__file__).parent / "_no_such_limits.json"
 
 
 def utc(h: int, m: int = 0, day: int = 2) -> datetime:
@@ -249,6 +254,78 @@ def test_totals_of_separates_catch_from_cache():
     ])
     assert t.catch == 30
     assert t.total_tokens == 4330
+
+
+def test_official_limits_beat_every_guess():
+    """상태줄 훅이 받아둔 공식 수치가 있으면 추정도 수동 고정도 무시한다.
+
+    공식 값은 웹·모바일 사용까지 반영돼 있어서, JSONL만 보는 추정보다 항상 낫다.
+    """
+    import json
+    import os
+    import tempfile
+
+    now = utc(17, 0)
+    reset = utc(20, 11)
+    entries = [
+        entry("old", utc(13, 36), 999),    # 공식 창 밖 — 이전 창 것
+        entry("cur", utc(15, 30), 10),
+        entry("cur2", utc(16, 30), 20),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "limits.json"
+        path.write_text(json.dumps({
+            "rate_limits": {
+                "five_hour": {"used_percentage": 51, "resets_at": reset.timestamp()},
+                "seven_day": {"used_percentage": 20, "resets_at": reset.timestamp()},
+            }
+        }), encoding="utf-8")
+
+        original = statusline.STATE_PATH
+        statusline.STATE_PATH = path
+        # 수동 고정도 걸어둔다 — 공식 수치가 이겨야 한다
+        os.environ["TOKENFISHING_RESET_AT"] = utc(23, 0).isoformat()
+        try:
+            snap = snapshot(entries, now=now)
+        finally:
+            statusline.STATE_PATH = original
+            del os.environ["TOKENFISHING_RESET_AT"]
+
+    assert snap.pinned is True
+    assert snap.used_percentage == 51
+    assert snap.weekly_percentage == 20
+    assert snap.window is not None
+    assert snap.window.start == utc(15, 11)
+    assert snap.window.end == reset
+    assert snap.window.entries == 2, "공식 창 밖의 요청은 빠진다"
+    assert snap.window.output_tokens == 30
+    assert snap.time_to_reset == timedelta(hours=3, minutes=11)
+
+
+def test_expired_official_limits_are_ignored():
+    """리셋 시각이 지난 공식 값은 버린다. 오래된 창을 붙들고 있으면 안 된다."""
+    import json
+    import tempfile
+
+    now = utc(17, 0)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "limits.json"
+        path.write_text(json.dumps({
+            "rate_limits": {
+                "five_hour": {"used_percentage": 99,
+                              "resets_at": utc(16, 0).timestamp()},
+            }
+        }), encoding="utf-8")
+        original = statusline.STATE_PATH
+        statusline.STATE_PATH = path
+        try:
+            snap = snapshot([entry("a", utc(16, 30), 10)], now=now)
+        finally:
+            statusline.STATE_PATH = original
+
+    assert snap.pinned is False
+    assert snap.used_percentage is None
 
 
 def main() -> int:

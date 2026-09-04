@@ -125,8 +125,15 @@ class Popup:
             else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
         )
         self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
-        self.labels["weekly"].configure(text=f"주간 {s.weekly_catch:,} 토큰")
-        note = "공식값 고정" if s.pinned else "추정 (웹/모바일 사용은 안 보임)"
+        if s.used_percentage is not None:
+            self.labels["catch"].configure(
+                text=f"{s.used_percentage:.0f}%  ·  {s.catch:,} 토큰"
+            )
+        weekly = (f"주간 {s.weekly_percentage:.0f}%  ·  {s.weekly_catch:,} 토큰"
+                  if s.weekly_percentage is not None
+                  else f"주간 {s.weekly_catch:,} 토큰")
+        self.labels["weekly"].configure(text=weekly)
+        note = "공식 수치" if s.pinned else "추정 (웹/모바일 사용은 안 보임)"
         prov = " · ".join(f"{k} {v}" for k, v in s.provenance.items())
         self.labels["foot"].configure(text=f"{note} · {prov or '요청 없음'}")
 
@@ -204,6 +211,12 @@ class Popup:
 
 
 def main() -> int:
+    import sys
+
+    if "--install-statusline" in sys.argv:
+        from .statusline import install
+        return install()
+
     root = tk.Tk()
     Popup(root, build_state())
     root.mainloop()

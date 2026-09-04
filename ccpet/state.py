@@ -81,6 +81,11 @@ class GameState:
     먹지만 JSONL에 안 남기 때문에, 그런 사용이 창을 열었으면 추정이 어긋난다.
     화면에서 이걸 숨기지 말 것 — 틀릴 수 있는 숫자를 확실한 척 보여주면 안 된다."""
 
+    used_percentage: float | None = None
+    """5시간 창 사용률(0~100). 공식 수치가 있을 때만 채워진다. 추정하지 않는다."""
+
+    weekly_percentage: float | None = None
+
     weekly_catch: int = 0
     """주간 리셋 이후 조업량. 공식 화면의 "주간 한도"에 대응한다. 0이면 미계산."""
 
@@ -109,6 +114,8 @@ def to_game_state(
             minutes_left=None,
             daylight=0.0,
             pinned=snap.pinned,
+            used_percentage=snap.used_percentage,
+            weekly_percentage=snap.weekly_percentage,
             weekly_catch=weekly_catch,
             tokens={},
             provenance=provenance or {},
@@ -131,6 +138,8 @@ def to_game_state(
         # 남은 시간이 많을수록 해가 높다.
         daylight=max(0.0, min(1.0, (left.total_seconds() / WINDOW.total_seconds()) if left else 0.0)),
         pinned=snap.pinned,
+        used_percentage=snap.used_percentage,
+        weekly_percentage=snap.weekly_percentage,
         weekly_catch=weekly_catch,
         tokens={
             "input": w.input_tokens,
