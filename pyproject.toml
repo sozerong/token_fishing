@@ -1,6 +1,6 @@
 [project]
 name = "token-fishing"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Claude Code 사용량을 낚시 도트 화면으로 보여주는 항상-위 팝업"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,3 +40,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["ccpet"]
+
+[tool.setuptools.dynamic]
+version = { attr = "ccpet.__version__" }

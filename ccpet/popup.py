@@ -18,6 +18,7 @@ import threading
 import tkinter as tk
 
 from . import config
+from . import __version__
 from .state import GameState
 from .render import build_state
 
@@ -46,7 +47,9 @@ class Popup:
         self.fish: list[dict] = []
         self._sync_fish()
 
-        root.title("token fishing")
+        # 어느 복사본이 도는지 제목으로 바로 보인다. 낡은 프로세스를 붙들고
+        # 디버깅하는 일이 실제로 있었다.
+        root.title(f"token fishing {__version__}")
         root.attributes("-topmost", True)
         root.resizable(False, False)
         root.configure(bg="#0d1117")
