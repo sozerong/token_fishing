@@ -13,7 +13,9 @@ HTML 화면(render.py)은 버리지 않는다 — Phase 3에서 MCP App으로 �
 
 from __future__ import annotations
 
+import os
 import random
+import sys
 import threading
 import tkinter as tk
 
@@ -50,6 +52,12 @@ def _pile_slots(rows=(7, 6, 5, 4, 2)) -> list[tuple[int, int]]:
 _PILE_SLOTS = _pile_slots()
 
 
+def _debug(msg: str) -> None:
+    """TOKENFISHING_DEBUG=1 일 때만 찍는다. 어느 경로로 숫자가 나왔는지 추적용."""
+    if os.environ.get("TOKENFISHING_DEBUG"):
+        print(f"[tokenfishing] {msg}", file=sys.stderr, flush=True)
+
+
 def _mix(a, b, t: float) -> str:
     return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
@@ -65,7 +73,7 @@ class Popup:
 
         # 어느 복사본이 도는지 제목으로 바로 보인다. 낡은 프로세스를 붙들고
         # 디버깅하는 일이 실제로 있었다.
-        root.title(f"token fishing {__version__}")
+        root.title(self._title())
         root.attributes("-topmost", True)
         root.resizable(False, False)
         root.configure(bg="#0d1117")
@@ -98,9 +106,20 @@ class Popup:
         self.mode_btn.pack(fill="x")
         self._apply_buttons()
 
+        _debug(f"start source={state.fill_source} pct={state.used_percentage} "
+               f"left={state.minutes_left} mode={self.settings['mode']}")
         self._apply_text()
         self._start_refresh()
         self._tick()
+
+    def _title(self) -> str:
+        """제목에 버전과 데이터 출처를 박는다.
+
+        낡은 프로세스를 붙들고 "왜 안 맞지" 하는 일이 반복됐다. 버전이 다르면
+        옛 창이고, 출처가 '공식'이 아니면 어림값이다. 창만 봐도 답이 나온다.
+        """
+        source = {"official": "공식", "learned": "어림", "none": "?"}
+        return f"token fishing {__version__} · {source.get(self.state.fill_source, '?')}"
 
     # ---- 토글 ----
 
@@ -128,9 +147,14 @@ class Popup:
                 try:
                     # 참조 하나를 통째로 갈아끼운다. GIL 덕에 락이 필요 없다.
                     self.state = build_state(self.settings)
-                except Exception:  # noqa: BLE001
+                    self.root.after(0, lambda: self.root.title(self._title()))
+                    _debug(f"source={self.state.fill_source} "
+                           f"pct={self.state.used_percentage} "
+                           f"left={self.state.minutes_left}")
+                except Exception as e:  # noqa: BLE001
                     # 파일이 쓰이는 중이라 읽기가 실패할 수 있다. 다음 주기에 다시 시도한다.
-                    pass
+                    # 조용히 넘기되, 왜 멈췄는지 물어볼 수 있게 흔적은 남긴다.
+                    _debug(f"refresh failed: {type(e).__name__}: {e}")
 
         self._stop = threading.Event()
         threading.Thread(target=loop, daemon=True).start()
