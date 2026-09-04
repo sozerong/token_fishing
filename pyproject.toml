@@ -4,6 +4,8 @@ version = "0.2.0"
 description = "Claude Code 사용량을 낚시 도트 화면으로 보여주는 항상-위 팝업"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "sozerong" }]
 keywords = ["claude-code", "token", "usage", "monitor", "pixel-art"]
 classifiers = [

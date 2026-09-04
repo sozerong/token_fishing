@@ -106,7 +106,11 @@ def compare(snapshot_path: Path | str) -> int:
         print(f"  우리      {mine.start.isoformat()} ~ {mine.end.isoformat()}")
         ref_start = local.get("session_start")
         if ref_start and datetime.fromisoformat(ref_start) != mine.start:
-            print("  ! 시작 시각이 다르다. 레퍼런스는 블록 시작을 정시로 내림하는 것으로 보인다")
+            print("  ! 시작 시각이 다르다. 레퍼런스는 블록 시작을 정시로 내림한다.")
+            print("    2026-09-05 공식 화면과 대조한 결과 정시 내림은 틀렸다 —"
+                  " 실제 세션 시작은 15:17이었다.")
+            print("    양쪽 다 JSONL만 보고 추측하므로 경계는 어차피 맞을 보장이 없다."
+                  " TOKENFISHING_RESET_AT으로 고정하는 게 정확하다.")
     print()
 
     # --- 항목별 대조 ---

@@ -57,36 +57,62 @@ def test_overlapping_sessions_merge_into_one_timeline():
     assert second.total_tokens == 2 + 110 + 200 + 2000
 
 
-def test_block_start_is_floored_to_the_hour():
-    """13:36에 시작한 블록은 13:00~18:00이 된다 (레퍼런스 claude-monitor와 일치).
+def entry(rid: str, ts: datetime, out: int, inp: int = 1) -> UsageEntry:
+    return UsageEntry(
+        request_id=rid, session_id="s", timestamp=ts, model="claude-opus-5",
+        input_tokens=inp, output_tokens=out, cache_creation_tokens=0,
+        cache_read_tokens=0, is_sidechain=False, provenance="stable",
+    )
 
-    overlapping.jsonl은 전부 정시/30분이라 이 동작을 못 잡는다. 그래서 엔트리를
-    직접 만든다 — 파서를 거칠 이유가 없는 집계 층의 문제다.
+
+def test_block_start_is_not_floored():
+    """13:36에 시작한 블록은 13:36~18:36이다. 정시로 내리지 않는다.
+
+    한때 내렸다. claude-monitor가 13:00을 내놓길래 맞춘 건데, 공식 사용량 화면과
+    대조하니 실제 세션 시작은 15:17 — 정시가 아니었다. 레퍼런스는 대조군이지
+    정답지가 아니다.
     """
-    entries = [
-        UsageEntry(
-            request_id="req_a", session_id="s", timestamp=utc(13, 36),
-            model="claude-opus-5", input_tokens=1, output_tokens=10,
-            cache_creation_tokens=0, cache_read_tokens=0,
-            is_sidechain=False, provenance="stable",
-        ),
-        # 18:00에 블록이 닫히므로 18:10은 새 블록을 연다. 내림이 없으면 같은 블록이다.
-        UsageEntry(
-            request_id="req_b", session_id="s", timestamp=utc(18, 10),
-            model="claude-opus-5", input_tokens=1, output_tokens=20,
-            cache_creation_tokens=0, cache_read_tokens=0,
-            is_sidechain=False, provenance="stable",
-        ),
-    ]
-
-    windows = build_windows(entries)
+    windows = build_windows([entry("a", utc(13, 36), 10), entry("b", utc(18, 40), 20)])
 
     assert len(windows) == 2
-    assert windows[0].start == utc(13)
-    assert windows[0].end == utc(18)
-    assert windows[0].output_tokens == 10
-    assert windows[1].start == utc(18)
-    assert windows[1].output_tokens == 20
+    assert windows[0].start == utc(13, 36)
+    assert windows[0].end == utc(18, 36)
+    assert windows[1].start == utc(18, 40)
+
+
+def test_pinned_reset_overrides_the_guess(monkeypatch=None):
+    """공식 UI에서 읽은 리셋 시각을 꽂으면 그 창만으로 센다.
+
+    JSONL만 보면 13:36이 창을 연 것처럼 보이지만, 실제로는 보이지 않는 웹/모바일
+    사용이 이미 창을 열어둔 상태였고 15:17이 새 창의 시작이었다. 실측 사례다.
+    """
+    import os
+
+    entries = [
+        entry("before", utc(13, 36), 999),   # 이전 창에 속한다
+        entry("after", utc(15, 20), 10),     # 진짜 현재 창
+        entry("after2", utc(16, 00), 20),
+    ]
+
+    guessed = snapshot(entries, now=utc(17, 0))
+    assert guessed.window is not None
+    assert guessed.window.start == utc(13, 36), "고정 없으면 첫 요청을 창 시작으로 본다"
+    assert guessed.window.output_tokens == 1029
+    assert guessed.pinned is False
+
+    os.environ["TOKENFISHING_RESET_AT"] = utc(20, 17).isoformat()
+    try:
+        pinned = snapshot(entries, now=utc(17, 0))
+    finally:
+        del os.environ["TOKENFISHING_RESET_AT"]
+
+    assert pinned.pinned is True
+    assert pinned.window is not None
+    assert pinned.window.start == utc(15, 17)
+    # 이전 창의 999 토큰이 빠진다
+    assert pinned.window.output_tokens == 30
+    assert pinned.window.entries == 2
+    assert pinned.time_to_reset == timedelta(hours=3, minutes=17)
 
 
 def test_current_window_and_reset():

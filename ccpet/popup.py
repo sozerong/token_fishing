@@ -118,12 +118,16 @@ class Popup:
             text=f"{s.tier}" + (f"  (물고기 {s.fish_uncapped}마리)" if s.fish_uncapped else "")
         )
         self.labels["bite"].configure(text=f"입질 {s.bite} · {s.bite_per_min:,.0f} 토큰/분")
+        # 추정값을 확실한 척 보여주지 않는다. ~ 가 붙어 있으면 틀릴 수 있다는 뜻.
+        mark = "" if s.pinned else "~"
         self.labels["left"].configure(
             text="리셋까지 —" if s.minutes_left is None
-            else f"리셋까지 {s.minutes_left // 60}시간 {s.minutes_left % 60}분"
+            else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
         )
+        self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
+        note = "공식값 고정" if s.pinned else "추정 (웹/모바일 사용은 안 보임)"
         prov = " · ".join(f"{k} {v}" for k, v in s.provenance.items())
-        self.labels["foot"].configure(text=f"input+output 기준 · {prov or '요청 없음'}")
+        self.labels["foot"].configure(text=f"{note} · {prov or '요청 없음'}")
 
     # ---- 그리기 ----
 

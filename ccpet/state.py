@@ -74,6 +74,13 @@ class GameState:
     daylight: float
     """1.0이면 방금 조업 시작, 0.0이면 리셋 직전. 해 높이로 그린다."""
 
+    pinned: bool = False
+    """리셋 시각이 공식 UI에서 꽂은 값인가.
+
+    False면 JSONL로 추정한 값이다. claude.ai 웹/모바일 사용량은 같은 5시간 한도를
+    먹지만 JSONL에 안 남기 때문에, 그런 사용이 창을 열었으면 추정이 어긋난다.
+    화면에서 이걸 숨기지 말 것 — 틀릴 수 있는 숫자를 확실한 척 보여주면 안 된다."""
+
     tokens: dict[str, int] = field(default_factory=dict)
     """네 항목 원본. 화면이 다르게 세고 싶을 때를 위해 그대로 싣는다."""
 
@@ -96,6 +103,7 @@ def to_game_state(
             bite_per_min=snap.tokens_per_minute,
             minutes_left=None,
             daylight=0.0,
+            pinned=snap.pinned,
             tokens={},
             provenance=provenance or {},
         )
@@ -116,6 +124,7 @@ def to_game_state(
         minutes_left=minutes_left,
         # 남은 시간이 많을수록 해가 높다.
         daylight=max(0.0, min(1.0, (left.total_seconds() / WINDOW.total_seconds()) if left else 0.0)),
+        pinned=snap.pinned,
         tokens={
             "input": w.input_tokens,
             "output": w.output_tokens,

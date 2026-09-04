@@ -52,6 +52,7 @@ def render(state: GameState, generated_at: datetime) -> str:
         "bitePerMin": state.bite_per_min,
         "minutesLeft": state.minutes_left,
         "daylight": state.daylight,
+        "pinned": state.pinned,
         "tokens": state.tokens,
         "provenance": state.provenance,
         "generatedAt": generated_at.astimezone().strftime("%Y-%m-%d %H:%M"),
@@ -117,9 +118,10 @@ $("catch").textContent = S.isFishing ? S.catch.toLocaleString() + " 토큰" : "�
 $("tier").textContent  = S.tier + (S.fishUncapped ? `  (물고기 ${S.fishUncapped}마리)` : "");
 $("bite").textContent  = `${S.bite} · ${Math.round(S.bitePerMin).toLocaleString()} 토큰/분`;
 $("left").textContent  = S.minutesLeft === null ? "조업 종료"
-  : `${Math.floor(S.minutesLeft/60)}시간 ${S.minutesLeft%60}분`;
+  : `${S.pinned ? "" : "~"}${Math.floor(S.minutesLeft/60)}시간 ${S.minutesLeft%60}분`;
+if (!S.pinned) $("left").style.color = "#d29922";
 const prov = Object.entries(S.provenance).map(([k,v]) => `${k} ${v}`).join(" · ");
-$("foot").textContent = `${S.generatedAt} 기준 · input+output 기준 · ${prov || "요청 없음"}`;
+$("foot").textContent = `${S.generatedAt} 기준 · ${S.pinned ? "공식값 고정" : "추정 (웹/모바일 사용은 안 보임)"} · ${prov || "요청 없음"}`;
 
 // ---- 도트 화면 ----
 const cv = $("c"), g = cv.getContext("2d");

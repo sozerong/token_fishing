@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -24,17 +25,15 @@ from .paths import session_files
 WINDOW = timedelta(hours=5)
 BURN_SPAN = timedelta(hours=1)
 
-FLOOR_TO_HOUR = True
-"""블록 시작을 정시로 내림할 것인가.
+FLOOR_TO_HOUR = False
+"""블록 시작을 정시로 내림할 것인가. **공식 UI와 대조해 False로 확정.**
 
-CLAUDE.md 원문 정의는 "첫 메시지에서 시작, 정확히 5시간"이라 내림이 없었다.
-그런데 claude-monitor 4.0.0과 대조해 보니 첫 요청 13:36에 대해 저쪽은
-session_start=13:00 / session_end=18:00을 내놓았다. 토큰 네 항목은 차이 0으로
-일치했으므로, 남은 불일치는 경계뿐이고 그게 "리셋까지 남은 시간"을 직접 정한다.
+한때 True였다. claude-monitor가 첫 요청 13:36에 대해 session_start=13:00을 내놓길래
+따라갔었다. 그런데 Claude 설정의 사용량 화면(공식)과 맞춰보니 실제 세션 시작은
+**15:17**이었다 — 정시가 아니다. 레퍼런스를 근거로 삼은 게 오답이었다.
 
-공식 rate_limits는 statusline 훅으로만 오고 JSONL에는 안 남아서 오프라인 근거가
-없다. 관측 가능한 유일한 증거가 레퍼런스라 그쪽을 따른다. 근거가 하나뿐이니
-False로 되돌리기 쉽게 상수로 뒀다 — compare가 경계 차이를 계속 감시한다."""
+교훈: claude-monitor는 대조군이지 정답지가 아니다. 저쪽도 JSONL만 보고 추측한다.
+둘이 일치한다고 맞는 게 아니다. 진짜 정답은 공식 UI뿐이다."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +81,60 @@ def collect_entries(files: Iterable[Path] | None = None) -> list[UsageEntry]:
         for e in parse_file(f).entries:
             seen.setdefault(e.request_id, e)
     return sorted(seen.values(), key=lambda e: e.timestamp)
+
+
+RESET_ENV = "TOKENFISHING_RESET_AT"
+
+
+def pinned_reset(now: datetime) -> datetime | None:
+    """공식 UI에서 읽은 리셋 시각. 없으면 None.
+
+    JSONL만으로는 윈도우 경계를 알 수 없는 경우가 있다 — claude.ai 웹이나 모바일에서
+    쓴 사용량도 같은 5시간 한도를 먹지만 여기엔 흔적이 안 남는다. 그런 사용이 창을
+    열었으면 우리가 보는 첫 요청은 창의 시작이 아니다. 실측된 사례다:
+    공식 세션 시작 15:17, 그날 Claude Code 첫 요청은 13:36.
+
+    그래서 사용자가 진짜 값을 꽂을 수 있게 한다. Claude 설정 > 사용량에 뜨는
+    "N시간 M분 후 재설정"을 시계 시각으로 바꿔 넣으면 된다:
+
+        TOKENFISHING_RESET_AT=05:17                      로컬 시각, 다음 도래분
+        TOKENFISHING_RESET_AT=2026-09-04T20:17:00+00:00  ISO 순간
+
+    ponytail: 설정 파일 대신 환경변수 하나. 값이 하나뿐이고 수명도 짧다.
+    """
+    raw = os.environ.get(RESET_ENV, "").strip()
+    if not raw:
+        return None
+
+    try:
+        if ":" in raw and len(raw) <= 5:  # "HH:MM"
+            hh, mm = (int(p) for p in raw.split(":"))
+            local = now.astimezone()
+            reset = local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if reset <= local:  # 이미 지났으면 내일 그 시각
+                reset += timedelta(days=1)
+            return reset.astimezone(timezone.utc)
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def anchored_window(entries: Iterable[UsageEntry], reset_at: datetime) -> Window:
+    """리셋 시각이 확실할 때, 그 창 [reset-5h, reset)만으로 집계한다.
+
+    블록을 이어붙이지 않으므로 보이지 않는 사용량 때문에 경계가 밀리는 문제가 없다.
+    """
+    start = reset_at - WINDOW
+    rows = [e for e in entries if start <= e.timestamp < reset_at]
+    return Window(
+        start,
+        len(rows),
+        sum(e.input_tokens for e in rows),
+        sum(e.output_tokens for e in rows),
+        sum(e.cache_creation_tokens for e in rows),
+        sum(e.cache_read_tokens for e in rows),
+    )
 
 
 def _block_start(ts: datetime) -> datetime:
@@ -150,6 +203,8 @@ class Snapshot:
     window: Window | None
     tokens_per_minute: float
     now: datetime
+    pinned: bool = False
+    """리셋 시각이 공식 UI에서 온 값인가. False면 JSONL로 추정한 값이라 틀릴 수 있다."""
 
     @property
     def total_tokens(self) -> int:
@@ -163,6 +218,16 @@ class Snapshot:
 def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snapshot:
     now = now or datetime.now(timezone.utc)
     entries = list(entries)
+
+    reset = pinned_reset(now)
+    if reset is not None and now < reset:
+        return Snapshot(
+            window=anchored_window(entries, reset),
+            tokens_per_minute=burn_rate(entries, now),
+            now=now,
+            pinned=True,
+        )
+
     return Snapshot(
         window=current_window(build_windows(entries), now),
         tokens_per_minute=burn_rate(entries, now),
