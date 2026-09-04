@@ -14,11 +14,36 @@ Claude Code 사용량을 낚시 도트 화면으로 보여주는 도구.
 
 ## 설치
 
-의존성이 없다. 받아서 바로 실행하면 된다.
+런타임 의존성이 0이라 설치가 가볍다. 셋 중 아무거나.
+
+### pip (권장)
+
+```bash
+pip install git+https://github.com/sozerong/token_fishing.git
+tokenfishing
+```
+
+`tokenfishing`(팝업)과 `tokenfishing-console`(콘솔 숫자) 두 명령이 깔린다.
+어느 폴더에서 쳐도 동작한다.
+
+### pipx / uvx — 전역 환경을 안 더럽히고 싶으면
+
+```bash
+pipx install git+https://github.com/sozerong/token_fishing.git
+```
+
+```bash
+uvx --from git+https://github.com/sozerong/token_fishing.git tokenfishing
+```
+
+`uvx`는 설치 없이 그 자리에서 실행한다.
+
+### git clone — 코드를 고칠 거면
 
 ```bash
 git clone https://github.com/sozerong/token_fishing.git
 cd token_fishing
+python -m ccpet
 ```
 
 **필요한 것**
@@ -40,6 +65,8 @@ python -c "import sys, tkinter; print(sys.version)"
 > 여러 버전이 깔린 Windows에서는 `python`이 옛 버전을 가리키는 경우가 흔하다.
 
 ## 실행
+
+설치했으면 `tokenfishing`, clone만 했으면 `python -m ccpet`. 아래는 후자로 쓴다.
 
 ### 1. 도트 팝업 (기본)
 

@@ -1,9 +1,36 @@
 [project]
-name = "ccpet"
-version = "0.1.0"
-description = "Claude Code 사용량 파서 + 검증 하네스"
+name = "token-fishing"
+version = "0.2.0"
+description = "Claude Code 사용량을 낚시 도트 화면으로 보여주는 항상-위 팝업"
+readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "sozerong" }]
+keywords = ["claude-code", "token", "usage", "monitor", "pixel-art"]
+classifiers = [
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+]
+
+# 런타임 의존성 0. tkinter는 표준 라이브러리라 여기 적지 않는다
+# (pip이 설치해 줄 수 있는 물건이 아니다 — 리눅스에서는 python3-tk로 깐다).
 dependencies = []
+
+[project.optional-dependencies]
+# 대조군. 런타임에는 필요 없고 정확도 검증할 때만 쓴다.
+compare = ["claude-monitor>=4"]
+
+[project.urls]
+Homepage = "https://github.com/sozerong/token_fishing"
+Source = "https://github.com/sozerong/token_fishing"
+
+[project.scripts]
+tokenfishing = "ccpet.popup:main"
+tokenfishing-console = "ccpet.aggregate:_main"
 
 [build-system]
 requires = ["setuptools>=68"]
