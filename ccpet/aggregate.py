@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import statusline
+from . import plan_usage, statusline
 from .parser import UsageEntry, parse_file
 from .paths import session_files
 
@@ -163,6 +163,58 @@ def weekly_totals(entries: Iterable[UsageEntry], now: datetime) -> Totals:
 
 
 RESET_ENV = "TOKENFISHING_RESET_AT"
+
+
+def app_usage(entries: list[UsageEntry], now: datetime) -> dict | None:
+    """데스크톱 앱의 플랜 사용량 기록에서 사용률과 창 경계를 뽑는다.
+
+    이게 기본 경로다. 상태줄 훅과 달리 설치도 재시작도 필요 없고, 앱이 켜져 있는
+    동안 15분마다 알아서 쌓인다. 웹·모바일 사용량도 반영된 계정 기준 수치다.
+
+    창 경계는 사용률이 급락한 지점(= 이전 창 종료) 뒤의 첫 요청에서 시작한다.
+    그 첫 요청이 Claude Code 밖에서 일어났다면 몇 분 늦게 잡힌다 — 실측에서 약
+    7분 차이였다. 훅의 resets_at이 있으면 그쪽이 정확하므로 그걸 우선한다.
+    """
+    rows = plan_usage.samples()
+    sample = plan_usage.latest(rows)
+    if sample is None:
+        return None
+
+    boundary = plan_usage.last_reset_before(rows, now)
+    after = [e for e in entries if boundary is None or e.timestamp > boundary]
+    if not after:
+        return None
+    start = after[0].timestamp
+    reset_at = start + WINDOW
+    reset_exact = False
+
+    # 훅이 살아 있으면 리셋 시각만은 그쪽이 정확하다.
+    hook = official_limits(now)
+    if hook is not None:
+        reset_at, reset_exact = hook["reset_at"], True
+    elif (pin := pinned_reset(now)) is not None and now < pin:
+        reset_at, reset_exact = pin, True
+
+    if reset_at <= now:
+        return None
+
+    def catch_through(upto: datetime) -> int:
+        return sum(
+            e.input_tokens + e.output_tokens
+            for e in entries
+            if reset_at - WINDOW <= e.timestamp <= upto
+        )
+
+    pct = plan_usage.calibrated_percentage(
+        sample, catch_through(sample.at), catch_through(now)
+    )
+    return {
+        "reset_at": reset_at,
+        "reset_exact": reset_exact,
+        # 눈금을 맞출 수 없으면 샘플 값을 그대로 쓴다 (최대 15분 뒤처짐).
+        "used_percentage": pct if pct is not None else sample.five_hour,
+        "weekly_percentage": sample.seven_day,
+    }
 
 
 def official_limits(now: datetime) -> dict | None:
@@ -342,7 +394,19 @@ def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snap
     entries = list(entries)
     rate = burn_rate(entries, now)
 
-    # 1순위: 상태줄 훅이 받아둔 공식 수치.
+    # 1순위: 데스크톱 앱의 플랜 사용량 기록. 설치도 재시작도 필요 없이 살아 있다.
+    app = app_usage(entries, now)
+    if app is not None:
+        return Snapshot(
+            window=anchored_window(entries, app["reset_at"]),
+            tokens_per_minute=rate,
+            now=now,
+            pinned=app["reset_exact"],
+            used_percentage=app["used_percentage"],
+            weekly_percentage=app["weekly_percentage"],
+        )
+
+    # 2순위: 상태줄 훅이 받아둔 공식 수치.
     official = official_limits(now)
     if official is not None:
         weekly = official["weekly"]

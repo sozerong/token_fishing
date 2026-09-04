@@ -23,7 +23,7 @@ from ccpet.aggregate import (  # noqa: E402
     weekly_start,
     weekly_totals,
 )
-from ccpet import statusline  # noqa: E402
+from ccpet import plan_usage, statusline  # noqa: E402
 from ccpet.parser import UsageEntry, parse_file  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -31,6 +31,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 # 테스트는 이 기계의 상태에 의존하면 안 된다. 상태줄 훅이 남긴 실제 공식 수치
 # 파일이 있으면 snapshot()이 그걸 우선하므로, 없는 경로로 돌려놓는다.
 statusline.STATE_PATH = Path(__file__).parent / "_no_such_limits.json"
+# 데스크톱 앱의 사용량 기록도 마찬가지. 없는 것으로 두고 시작한다.
+plan_usage.history_path = lambda: None
 
 
 def utc(h: int, m: int = 0, day: int = 2) -> datetime:

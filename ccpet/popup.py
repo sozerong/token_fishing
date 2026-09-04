@@ -13,6 +13,7 @@ HTML 화면(render.py)은 버리지 않는다 — Phase 3에서 MCP App으로 �
 
 from __future__ import annotations
 
+import random
 import threading
 import tkinter as tk
 
@@ -110,7 +111,6 @@ class Popup:
     def _commit_settings(self) -> None:
         config.save(self.settings)
         self.state = build_state(self.settings)
-        self.fish = []              # 마리 수가 확 바뀌므로 새로 만든다
         self._sync_fish()
         self._apply_buttons()
         self._apply_text()
@@ -137,22 +137,24 @@ class Popup:
         self._stop.set()
         self.root.destroy()
 
-    def _sync_fish(self) -> None:
-        """마리 수가 바뀌었을 때만 물고기를 다시 만든다."""
-        n = self.state.fish
-        if len(self.fish) == n:
-            return
+    def _new_fish(self) -> dict:
         speed = BITE_SPEED.get(self.state.bite, 0.2)
-        self.fish = [
-            {
-                "x": (i * 47 % (W - 20)) + 6,
-                "y": SEA + 10 + (i * 29 % (H - SEA - 20)),
-                "dir": 1 if i % 2 else -1,
-                "s": speed * (0.7 + (i % 5) * 0.12),
-                "c": FISH_COLORS[i % 4],
-            }
-            for i in range(n)
-        ]
+        return {
+            "x": random.uniform(4, W - 12),
+            "y": random.uniform(SEA + 6, H - 8),
+            "dir": random.choice((-1, 1)),
+            "s": speed * random.uniform(0.6, 1.4),
+            "c": random.choice(FISH_COLORS),
+            "phase": random.uniform(0, 6.28),      # 위아래 흔들림이 겹치지 않게
+        }
+
+    def _sync_fish(self) -> None:
+        """마리 수를 맞춘다. 늘어난 만큼만 새로 넣고 기존 물고기는 그대로 헤엄친다."""
+        n = self.state.fish
+        while len(self.fish) > n:
+            self.fish.pop()
+        while len(self.fish) < n:
+            self.fish.append(self._new_fish())
 
     def _apply_text(self) -> None:
         s = self.state
@@ -169,14 +171,8 @@ class Popup:
                 text=f"{mark}{pct:.0f}%  ·  {s.catch:,} 토큰",
                 fg="#f85149" if pct >= 90 else "#d29922" if pct >= 70 else "#7ee787",
             )
-        if s.mode == config.DEPLETION and s.fill is not None:
-            # 고갈 모드에서 화면의 물고기는 "잡은 수"가 아니라 "남은 바다"다.
-            tier = f"{s.tier}  ·  바다에 {s.fish}마리 남음"
-            if s.fill_source != "official":
-                tier += "  (플랜 근사)" if s.fill_source == "plan" else "  (측정 근사)"
-        else:
-            tier = s.tier + (f"  (물고기 {s.fish_uncapped}마리)" if s.fish_uncapped else "")
-        self.labels["tier"].configure(text=tier)
+        # 마리 수는 화면에 그려져 있다. 숫자로 또 적지 않는다.
+        self.labels["tier"].configure(text=s.tier)
         self.labels["bite"].configure(text=f"입질 {s.bite} · {s.bite_per_min:,.0f} 토큰/분")
         # 추정값을 확실한 척 보여주지 않는다. ~ 가 붙어 있으면 틀릴 수 있다는 뜻.
         mark = "" if s.pinned else "~"
@@ -189,15 +185,9 @@ class Popup:
                   if s.weekly_percentage is not None
                   else f"주간 {s.weekly_catch:,} 토큰")
         self.labels["weekly"].configure(text=weekly)
-        # 리셋 시각과 사용률은 출처가 다를 수 있다. 뭉뚱그려 "공식"이라 하지 않는다.
-        if not s.pinned:
-            note = "추정 (웹/모바일 사용은 안 보임)"
-        elif s.fill_source == "official":
-            note = "공식 수치"
-        else:
-            note = "리셋만 공식 · 사용률은 근사"
+        # 출처 설명은 빼고 숫자의 신뢰도만 남긴다. 어림값은 앞의 ~ 로 이미 보인다.
         prov = " · ".join(f"{k} {v}" for k, v in s.provenance.items())
-        self.labels["foot"].configure(text=f"{note} · {prov or '요청 없음'}")
+        self.labels["foot"].configure(text=prov)
 
     # ---- 그리기 ----
 
@@ -234,7 +224,7 @@ class Popup:
                 f["x"], f["dir"] = 2, 1
             if f["x"] > W - 10:
                 f["x"], f["dir"] = W - 10, -1
-            y = f["y"] + math.sin(t * 0.25 + f["x"] * 0.3) * 1.2
+            y = f["y"] + math.sin(t * 0.25 + f["phase"]) * 1.2
             back = -1 if f["dir"] > 0 else 5
             fork = back + (-1 if f["dir"] > 0 else 1)
             self._px(f["x"], y, 5, 3, f["c"])

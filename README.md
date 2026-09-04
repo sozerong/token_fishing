@@ -69,39 +69,33 @@ python -c "import sys, tkinter; print(sys.version)"
 > 3.11 미만이 뜨거나 `python`이 안 잡히면 아래 예시의 `python`을
 > `py -3.12`(Windows) 또는 `python3.12`로 바꿔 읽으면 된다.
 
-## 정확한 수치 켜기 (권장)
+## 수치는 어디서 오나
 
-한 번만 하면 된다.
+사용률은 Claude 데스크톱 앱이 남기는 플랜 사용량 기록에서 읽는다. 계정 기준
+공식 수치라 claude.ai 웹이나 모바일에서 쓴 양까지 들어 있다. **따로 설정할 게 없다.**
+
+앱은 15분마다 기록하므로 그 사이 값은 로그로 보정해 채운다. 리셋 시각은
+사용률이 리셋된 지점을 찾아 계산한다.
+
+<details>
+<summary>리셋 시각을 더 정확히 맞추려면</summary>
+
+Claude Code 상태줄 훅을 등록하면 정확한 리셋 시각을 받아온다.
 
 ```bash
 tokenfishing --install-statusline
 ```
 
-Claude Code 상태줄에 훅을 등록한다. Claude Code가 실행될 때마다 **공식 사용량**
-(5시간 사용률, 리셋 시각, 주간 사용률)을 넘겨주고, 팝업이 그 값을 쓴다.
-상태줄에도 한 줄로 뜬다:
+등록 후 Claude Code를 새로 시작하면 적용된다. `~/.claude/settings.json`은
+백업된 뒤 `statusLine` 항목만 추가되고, 상태줄에도 한 줄이 뜬다.
 
-```
-🎣 █████░░░░░ 51% · 2시간 30분 남음  |  주간 20%
-```
-
-등록 후 Claude Code를 새로 시작하면 적용된다. 기존 `~/.claude/settings.json`은
-백업된 뒤 `statusLine` 항목만 추가된다.
-
-**왜 필요한가.** 훅이 없으면 리셋 시각을 로그로 추정하는데, claude.ai 웹이나
-모바일에서 쓴 양은 로그에 남지 않아 어긋날 수 있다. 추정 중일 때는 화면에 `~`가
-붙고 색이 바뀌므로 헷갈릴 일은 없다.
-
-<details>
-<summary>훅을 쓸 수 없을 때</summary>
-
-Pro/Max 구독이 아니거나 상태줄을 다른 용도로 쓰고 있다면, 리셋 시각을 직접 넣으면 된다.
-Claude 설정 → 사용량의 "N시간 M분 후 재설정"을 시계 시각으로 바꿔 넣는다.
+직접 넣어도 된다 — Claude 설정 → 사용량의 "N시간 M분 후 재설정"을 시계 시각으로:
 
 ```bash
-export TOKENFISHING_RESET_AT=05:17                       # 로컬 시각
-export TOKENFISHING_RESET_AT=2026-09-04T20:11:00+00:00   # 또는 ISO
+export TOKENFISHING_RESET_AT=05:17
 ```
+
+시각 앞에 `~`가 붙어 있으면 계산으로 맞춘 값이라는 뜻이다.
 </details>
 
 ## 사용
