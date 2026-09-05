@@ -13,6 +13,7 @@ HTML 화면(render.py)은 버리지 않는다 — Phase 3에서 MCP App으로 �
 
 from __future__ import annotations
 
+import math
 import os
 import random
 import sys
@@ -20,10 +21,8 @@ import threading
 import tkinter as tk
 from pathlib import Path
 
-from . import config
-from . import __version__, debug
-from .state import GameState
-from .render import build_state
+from . import __version__, config, debug
+from .state import GameState, build_state
 
 SCALE = 2
 W, H = 180, 120          # 가상 도트 해상도. 실제 창은 이것의 SCALE배.
@@ -229,8 +228,6 @@ class Popup:
         )
 
     def _draw(self) -> None:
-        import math
-
         s, t = self.state, self.frame
         self.canvas.delete("all")
         d = s.daylight if s.is_fishing else 0.0

@@ -37,7 +37,12 @@ STATE_PATH = Path.home() / ".claude" / "tokenfishing-limits.json"
 
 
 def save(payload: dict) -> None:
-    """원자적으로 쓴다. 팝업이 동시에 읽어도 반쯤 쓰인 파일을 보지 않게."""
+    """원자적으로 쓴다. 팝업이 동시에 읽어도 반쯤 쓰인 파일을 보지 않게.
+
+    ponytail: config.save와 같은 코드지만 합치지 않는다. 이 파일은 상태줄 훅으로
+    **경로를 직접 지정해 실행**되므로(hook_command 참고) 패키지 상대 import를
+    하는 순간 훅이 죽는다. 그래서 이 모듈만 표준 라이브러리로 자족한다.
+    """
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=STATE_PATH.parent, suffix=".tmp")
     try:

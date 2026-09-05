@@ -53,6 +53,11 @@ class Window:
         return self.start + WINDOW
 
     @property
+    def catch(self) -> int:
+        """5시간 한도가 실제로 세는 값. Totals.catch와 같은 정의."""
+        return self.input_tokens + self.output_tokens
+
+    @property
     def total_tokens(self) -> int:
         """네 항목의 합. cache_read가 실측에서 나머지를 압도한다(약 200배).
         게임 층에서 다르게 세고 싶으면 항목을 직접 골라 써라."""
@@ -115,6 +120,15 @@ def totals_of(entries: Iterable[UsageEntry]) -> Totals:
         sum(e.output_tokens for e in rows),
         sum(e.cache_creation_tokens for e in rows),
         sum(e.cache_read_tokens for e in rows),
+    )
+
+
+def _window(start: datetime, rows: list[UsageEntry]) -> Window:
+    """엔트리 묶음 하나를 창으로. 합산은 totals_of 한 곳에만 둔다."""
+    t = totals_of(rows)
+    return Window(
+        start, t.requests, t.input_tokens, t.output_tokens,
+        t.cache_creation_tokens, t.cache_read_tokens,
     )
 
 
@@ -340,15 +354,7 @@ def anchored_window(entries: Iterable[UsageEntry], reset_at: datetime) -> Window
     블록을 이어붙이지 않으므로 보이지 않는 사용량 때문에 경계가 밀리는 문제가 없다.
     """
     start = reset_at - WINDOW
-    rows = [e for e in entries if start <= e.timestamp < reset_at]
-    return Window(
-        start,
-        len(rows),
-        sum(e.input_tokens for e in rows),
-        sum(e.output_tokens for e in rows),
-        sum(e.cache_creation_tokens for e in rows),
-        sum(e.cache_read_tokens for e in rows),
-    )
+    return _window(start, [e for e in entries if start <= e.timestamp < reset_at])
 
 
 def _block_start(ts: datetime) -> datetime:
@@ -368,24 +374,16 @@ def build_windows(entries: Iterable[UsageEntry]) -> list[Window]:
     """
     windows: list[Window] = []
     start: datetime | None = None
-    n = i = o = cw = cr = 0
-
-    def flush() -> None:
-        nonlocal start, n, i, o, cw, cr
-        if start is not None:
-            windows.append(Window(start, n, i, o, cw, cr))
-        start, n, i, o, cw, cr = None, 0, 0, 0, 0, 0
+    bucket: list[UsageEntry] = []
 
     for e in sorted(entries, key=lambda x: x.timestamp):
         if start is None or e.timestamp >= start + WINDOW:
-            flush()
-            start = _block_start(e.timestamp)
-        n += 1
-        i += e.input_tokens
-        o += e.output_tokens
-        cw += e.cache_creation_tokens
-        cr += e.cache_read_tokens
-    flush()
+            if bucket:
+                windows.append(_window(start, bucket))
+            start, bucket = _block_start(e.timestamp), []
+        bucket.append(e)
+    if bucket:
+        windows.append(_window(start, bucket))
     return windows
 
 
@@ -402,12 +400,8 @@ def burn_rate(
 ) -> float:
     """최근 span(기본 1시간) 동안의 분당 토큰. 활성 세션 전부에서 모은다."""
     since = now - span
-    total = sum(
-        e.input_tokens + e.output_tokens + e.cache_creation_tokens + e.cache_read_tokens
-        for e in entries
-        if since <= e.timestamp <= now
-    )
-    return total / (span.total_seconds() / 60)
+    recent = totals_of(e for e in entries if since <= e.timestamp <= now)
+    return recent.total_tokens / (span.total_seconds() / 60)
 
 
 @dataclass(frozen=True, slots=True)

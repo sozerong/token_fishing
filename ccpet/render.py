@@ -16,49 +16,12 @@ from __future__ import annotations
 import json
 import sys
 import webbrowser
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .aggregate import (
-    build_windows,
-    collect_entries,
-    current_window,
-    snapshot,
-    weekly_totals,
-)
-from . import config
-from .state import GameState, to_game_state
+from .state import GameState, build_state
 
 DEFAULT_OUT = Path("tokenfishing.html")
-
-
-def build_state(settings: dict | None = None) -> GameState:
-    settings = settings or config.load()
-    entries = collect_entries()
-    now = datetime.now(timezone.utc)
-    snap = snapshot(entries, now)
-
-    window = current_window(build_windows(entries), now)
-    in_window = (
-        [e for e in entries if window and window.start <= e.timestamp < window.end]
-        if window
-        else []
-    )
-    prov = dict(Counter(e.provenance for e in in_window))
-
-    # 공식 사용률을 본 김에 이 계정의 한도를 재둔다. 나중에 훅이 없을 때 쓴다.
-    catch = (snap.window.input_tokens + snap.window.output_tokens) if snap.window else 0
-    if config.learn_limit(settings, catch, snap.used_percentage):
-        config.save(settings)
-
-    return to_game_state(
-        snap,
-        prov,
-        weekly_catch=weekly_totals(entries, now).catch,
-        mode=settings["mode"],
-        learned_limit=settings.get("learned_limit"),
-    )
 
 
 def render(state: GameState, generated_at: datetime) -> str:

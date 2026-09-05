@@ -14,10 +14,12 @@ Phase 3에서 다르게 세고 싶으면 거기서 골라 쓰면 된다.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from . import config
-from .aggregate import WINDOW, Snapshot
+from .aggregate import WINDOW, Snapshot, collect_entries, snapshot, weekly_totals
 
 # 튜닝 손잡이. 실측 감각으로 잡은 값이라 써 보고 고치라고 밖에 빼뒀다.
 FISH_PER_TOKEN = 2_000
@@ -155,44 +157,25 @@ def to_game_state(
     learned_limit: int | None = None,
 ) -> GameState:
     w = snap.window
-    if w is None:
-        return GameState(
-            is_fishing=False,
-            catch=0,
-            fish=0,
-            fish_uncapped=0,
-            tier=CATCH_TIERS[0][1],
-            bite=BITE_LEVELS[0][1],
-            bite_per_min=snap.tokens_per_minute,
-            minutes_left=None,
-            daylight=0.0,
-            pinned=snap.pinned,
-            mode=mode,
-            casts=0,
-            used_percentage=snap.used_percentage,
-            official_source=snap.official_source,
-            weekly_percentage=snap.weekly_percentage,
-            weekly_catch=weekly_catch,
-            tokens={},
-            provenance=provenance or {},
-        )
-
-    catch = w.input_tokens + w.output_tokens
-    fill, fill_source = _fill(snap, catch, learned_limit)
+    catch = w.catch if w else 0
+    # 창이 없으면 채운 비율도 없다. 등급은 절대량(0)으로 떨어진다.
+    fill, fill_source = _fill(snap, catch, learned_limit) if w else (None, "none")
 
     on_boat = 0
-    if mode == config.DEPLETION and fill is not None:
+    if w is None:
+        uncapped = 0
+    elif mode == config.DEPLETION and fill is not None:
         # 고갈 모드: 바다가 가득 찬 상태에서 시작해 쓸수록 비어 간다.
         # 바다에서 사라진 만큼이 배 위에 쌓인다 — 합은 항상 MAX_FISH_DRAWN.
         uncapped = round(MAX_FISH_DRAWN * (1.0 - fill))
         on_boat = MAX_FISH_DRAWN - uncapped
     else:
         uncapped = catch // FISH_PER_TOKEN
-    left = snap.time_to_reset
-    minutes_left = int(left.total_seconds() // 60) if left else 0
+
+    left = snap.time_to_reset  # 창이 없으면 None
 
     return GameState(
-        is_fishing=True,
+        is_fishing=w is not None,
         catch=catch,
         fish=min(uncapped, MAX_FISH_DRAWN),
         fish_uncapped=uncapped,
@@ -200,12 +183,12 @@ def to_game_state(
         tier=_level(fill, FILL_TIERS) if fill is not None else _level(catch, CATCH_TIERS),
         bite=_level(snap.tokens_per_minute, BITE_LEVELS),
         bite_per_min=snap.tokens_per_minute,
-        minutes_left=minutes_left,
+        minutes_left=None if left is None else int(left.total_seconds() // 60),
         # 남은 시간이 많을수록 해가 높다.
-        daylight=max(0.0, min(1.0, (left.total_seconds() / WINDOW.total_seconds()) if left else 0.0)),
+        daylight=max(0.0, min(1.0, left / WINDOW)) if left else 0.0,
         pinned=snap.pinned,
         mode=mode,
-        casts=w.entries,
+        casts=w.entries if w else 0,
         on_boat=on_boat,
         fill=fill,
         fill_source=fill_source,
@@ -218,6 +201,33 @@ def to_game_state(
             "output": w.output_tokens,
             "cache_creation": w.cache_creation_tokens,
             "cache_read": w.cache_read_tokens,
-        },
+        } if w else {},
         provenance=provenance or {},
+    )
+
+
+def build_state(settings: dict | None = None) -> GameState:
+    """디스크에 있는 것 전부 → 화면이 읽는 상태 하나. 팝업과 HTML의 공통 진입점.
+
+    새 집계를 여기서 만들지 않는다. aggregate가 준 값을 모아 to_game_state에 넘길 뿐이다.
+    """
+    settings = settings or config.load()
+    entries = collect_entries()
+    now = datetime.now(timezone.utc)
+    snap = snapshot(entries, now)
+    w = snap.window
+
+    # provenance는 화면에 뜬 그 창에 대한 것이어야 한다 — 창을 다시 계산하지 않는다.
+    prov = Counter(e.provenance for e in entries if w and w.start <= e.timestamp < w.end)
+
+    # 공식 사용률을 본 김에 이 계정의 한도를 재둔다. 나중에 훅이 없을 때 쓴다.
+    if config.learn_limit(settings, w.catch if w else 0, snap.used_percentage):
+        config.save(settings)
+
+    return to_game_state(
+        snap,
+        dict(prov),
+        weekly_catch=weekly_totals(entries, now).catch,
+        mode=settings["mode"],
+        learned_limit=settings.get("learned_limit"),
     )
