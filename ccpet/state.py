@@ -114,6 +114,12 @@ class GameState:
     fill_source: str = "none"
     """"official" | "learned" | "none". 어디서 온 숫자인지 화면에서 밝힌다."""
 
+    official_source: str = "none"
+    """공식 사용률의 출처: "hook" | "app" | "none".
+
+    fill_source가 official이 아닐 때 **왜인지**를 화면에 적는 데 쓴다.
+    "어림"만 뜨고 이유가 없으면 훅이 없는 건지 앱이 꺼진 건지 알 수가 없다."""
+
     casts: int = 0
     """이번 창에서 던진 횟수 = 요청 수."""
 
@@ -164,6 +170,7 @@ def to_game_state(
             mode=mode,
             casts=0,
             used_percentage=snap.used_percentage,
+            official_source=snap.official_source,
             weekly_percentage=snap.weekly_percentage,
             weekly_catch=weekly_catch,
             tokens={},
@@ -202,6 +209,7 @@ def to_game_state(
         on_boat=on_boat,
         fill=fill,
         fill_source=fill_source,
+        official_source=snap.official_source,
         used_percentage=snap.used_percentage,
         weekly_percentage=snap.weekly_percentage,
         weekly_catch=weekly_catch,

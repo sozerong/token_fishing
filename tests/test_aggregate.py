@@ -5,6 +5,8 @@ pytest 없이도 돌아간다:  py -3.12 tests/test_aggregate.py
 
 from __future__ import annotations
 
+import os
+
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ccpet.aggregate import (  # noqa: E402
+    resolve_official,
     build_windows,
     burn_rate,
     collect_entries,
@@ -31,8 +34,12 @@ FIXTURES = Path(__file__).parent / "fixtures"
 # 테스트는 이 기계의 상태에 의존하면 안 된다. 상태줄 훅이 남긴 실제 공식 수치
 # 파일이 있으면 snapshot()이 그걸 우선하므로, 없는 경로로 돌려놓는다.
 statusline.STATE_PATH = Path(__file__).parent / "_no_such_limits.json"
-# 데스크톱 앱의 사용량 기록도 마찬가지. 없는 것으로 두고 시작한다.
-plan_usage.history_path = lambda: None
+# 데스크톱 앱의 사용량 기록도 마찬가지. 모듈 함수를 갈아치우면 다른 테스트 파일이
+# 그 스텁을 "원본"으로 챙기게 되므로, 후보 경로가 나오는 환경변수만 없는 곳으로 돌린다.
+_NOWHERE = str(Path(__file__).parent / "_no_such_appdata")
+os.environ["APPDATA"] = _NOWHERE
+os.environ["LOCALAPPDATA"] = _NOWHERE
+os.environ.pop("XDG_CONFIG_HOME", None)
 
 
 def utc(h: int, m: int = 0, day: int = 2) -> datetime:
@@ -388,3 +395,82 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def test_app_percentage_survives_an_unusable_window_boundary():
+    """앱이 꺼져 있어 샘플이 비어도 사용률은 공식이다. 창 경계와 독립이다.
+
+    실측: 18:59 fh=100 다음 샘플이 7시간 반 뒤 02:31 fh=0. 급락만 보면 하한이
+    18:59라 "그 뒤 첫 요청"(19:07)은 이전 창의 것이고, 거기서 만든 창은 00:07에
+    이미 만료다. 한때 이걸 만나면 사용률까지 통째로 버려서 화면이 "어림"으로
+    떨어졌다 — 경계와 사용률은 서로 독립인데도.
+
+    지금은 fh=0 샘플이 더 좁은 하한을 주므로 경계 자체도 제대로 잡힌다.
+    """
+    now = utc(2, 34, day=5)
+    rows = [
+        plan_usage.Sample(utc(18, 59, day=4), 100, 25),
+        plan_usage.Sample(utc(2, 31, day=5), 0, 25),
+    ]
+    entries = [entry("old", utc(19, 7, day=4), 10), entry("new", utc(2, 32, day=5), 20)]
+
+    original = plan_usage.samples
+    plan_usage.samples = lambda: rows
+    try:
+        off = resolve_official(entries, now)
+        snap = snapshot(entries, now=now)
+    finally:
+        plan_usage.samples = original
+
+    # fh=0 (02:31) 뒤 첫 요청 02:32 가 창을 열었다. 급락 하한 18:59 가 아니다.
+    assert off.reset_at == utc(7, 32, day=5)
+    assert off.reset_exact is False, "추정이므로 확정으로 표시하지 않는다"
+    assert off.used_percentage == 0, "공식 사용률은 살아남는다"
+    assert snap.used_percentage == 0
+    assert snap.weekly_percentage == 25
+    assert snap.window is not None and snap.window.entries == 1, "이전 창 요청은 빠진다"
+
+
+def test_percentage_survives_even_with_no_reset_time_at_all():
+    """리셋 시각을 아예 못 구해도 사용률은 공식으로 남는다."""
+    now = utc(17, 0)
+    rows = [plan_usage.Sample(utc(16, 30), 63, 21)]   # 급락도 fh=0 도 없다
+    entries = [entry("a", utc(15, 0), 10)]
+
+    original = plan_usage.samples
+    plan_usage.samples = lambda: rows
+    try:
+        off = resolve_official(entries, now)
+    finally:
+        plan_usage.samples = original
+
+    assert off.reset_at is None
+    assert off.used_percentage == 63
+    assert off.weekly_percentage == 21
+
+
+def test_leaked_epoch_never_renders_as_a_percentage():
+    """used_percentage 자리에 resets_at epoch이 새는 버그(#52326) 방어."""
+    import json
+    import tempfile
+
+    reset = utc(20, 0)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "limits.json"
+        path.write_text(json.dumps({
+            "rate_limits": {
+                "five_hour": {
+                    "used_percentage": reset.timestamp(),   # ← 샌 값
+                    "resets_at": reset.timestamp(),
+                },
+            }
+        }), encoding="utf-8")
+        original = statusline.STATE_PATH
+        statusline.STATE_PATH = path
+        try:
+            snap = snapshot([entry("a", utc(16, 0), 10)], now=utc(17, 0))
+        finally:
+            statusline.STATE_PATH = original
+
+    assert snap.used_percentage is None, "100%로 박히면 안 된다"
+    assert snap.pinned is True, "리셋 시각 자체는 여전히 정확하다"

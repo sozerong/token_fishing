@@ -144,12 +144,15 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         return 0  # 상태줄은 절대 시끄럽게 실패하면 안 된다
 
+    now = datetime.now(timezone.utc)
     limits = session.get("rate_limits")
     if not isinstance(limits, dict) or not limits:
-        # Pro/Max가 아니거나 아직 첫 API 응답 전이다. 조용히 지나간다.
+        # Pro/Max가 아니거나 아직 첫 API 응답 전이다. 조용히 지나가되 **비워둔다** —
+        # 플랜이 내려가면 rate_limits가 사라지는데, 그때 옛 기록을 지우지 않으면
+        # 화면이 지난 구독의 사용률을 공식이라며 영원히 보여준다.
+        save({"rate_limits": None, "captured_at": now.isoformat()})
         return 0
 
-    now = datetime.now(timezone.utc)
     save({"rate_limits": limits, "captured_at": now.isoformat()})
 
     line = _line(limits, now)

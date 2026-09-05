@@ -18,9 +18,10 @@ import random
 import sys
 import threading
 import tkinter as tk
+from pathlib import Path
 
 from . import config
-from . import __version__
+from . import __version__, debug
 from .state import GameState
 from .render import build_state
 
@@ -50,12 +51,6 @@ def _pile_slots(rows=(7, 6, 5, 4, 2)) -> list[tuple[int, int]]:
 
 
 _PILE_SLOTS = _pile_slots()
-
-
-def _debug(msg: str) -> None:
-    """TOKENFISHING_DEBUG=1 일 때만 찍는다. 어느 경로로 숫자가 나왔는지 추적용."""
-    if os.environ.get("TOKENFISHING_DEBUG"):
-        print(f"[tokenfishing] {msg}", file=sys.stderr, flush=True)
 
 
 def _mix(a, b, t: float) -> str:
@@ -106,8 +101,9 @@ class Popup:
         self.mode_btn.pack(fill="x")
         self._apply_buttons()
 
-        _debug(f"start source={state.fill_source} pct={state.used_percentage} "
-               f"left={state.minutes_left} mode={self.settings['mode']}")
+        debug(f"start fill={state.fill_source} official={state.official_source} "
+               f"pct={state.used_percentage} left={state.minutes_left} "
+               f"mode={self.settings['mode']}")
         self._apply_text()
         self._start_refresh()
         self._tick()
@@ -118,8 +114,15 @@ class Popup:
         낡은 프로세스를 붙들고 "왜 안 맞지" 하는 일이 반복됐다. 버전이 다르면
         옛 창이고, 출처가 '공식'이 아니면 어림값이다. 창만 봐도 답이 나온다.
         """
-        source = {"official": "공식", "learned": "어림", "none": "?"}
-        return f"token fishing {__version__} · {source.get(self.state.fill_source, '?')}"
+        s = self.state
+        if s.fill_source == "official":
+            where = {"hook": "공식·훅", "app": "공식·앱"}.get(s.official_source, "공식")
+        else:
+            # 왜 공식이 아닌지 적는다. "어림"만 뜨면 훅이 없는 건지 앱이 꺼진
+            # 건지 알 수가 없어서, 재현 안 되는 화면을 붙들고 시간을 버렸다.
+            label = {"learned": "어림", "none": "?"}.get(s.fill_source, "?")
+            where = f"{label}(공식수치 없음)"
+        return f"token fishing {__version__} · {where}"
 
     # ---- 토글 ----
 
@@ -148,13 +151,14 @@ class Popup:
                     # 참조 하나를 통째로 갈아끼운다. GIL 덕에 락이 필요 없다.
                     self.state = build_state(self.settings)
                     self.root.after(0, lambda: self.root.title(self._title()))
-                    _debug(f"source={self.state.fill_source} "
+                    debug(f"fill={self.state.fill_source} "
+                           f"official={self.state.official_source} "
                            f"pct={self.state.used_percentage} "
                            f"left={self.state.minutes_left}")
                 except Exception as e:  # noqa: BLE001
                     # 파일이 쓰이는 중이라 읽기가 실패할 수 있다. 다음 주기에 다시 시도한다.
                     # 조용히 넘기되, 왜 멈췄는지 물어볼 수 있게 흔적은 남긴다.
-                    _debug(f"refresh failed: {type(e).__name__}: {e}")
+                    debug(f"refresh failed: {type(e).__name__}: {e}")
 
         self._stop = threading.Event()
         threading.Thread(target=loop, daemon=True).start()
@@ -296,12 +300,94 @@ class Popup:
         self.root.after(FRAME_MS, self._tick)
 
 
-def main() -> int:
-    import sys
+def _detach(argv: list[str]) -> int:
+    """자기 자신을 백그라운드로 다시 띄우고 셸을 돌려준다.
 
-    if "--install-statusline" in sys.argv:
+    데몬화 라이브러리를 쓰지 않는다. 창 하나 띄우는 게 전부라 부모와의 연을
+    끊고 표준 입출력만 버리면 끝난다.
+    """
+    import subprocess
+
+    rest = [a for a in argv if a not in ("-d", "--detach")]
+    executable = sys.executable
+    options: dict = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "cwd": os.getcwd(),
+    }
+    if sys.platform == "win32":
+        # pythonw 로 띄우면 콘솔 창이 같이 뜨지 않는다.
+        windowless = Path(executable).with_name("pythonw.exe")
+        if windowless.exists():
+            executable = str(windowless)
+        options["creationflags"] = (
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+    else:
+        options["start_new_session"] = True
+
+    child = subprocess.Popen([executable, "-m", "ccpet", *rest], **options)
+    print(f"백그라운드 실행 중 (PID {child.pid})")
+    return 0
+
+
+USAGE = f"""token fishing {__version__} - Claude 사용량 도트 팝업
+
+  tokenfishing [옵션]
+
+옵션
+  -d, --detach            백그라운드로 띄우고 셸을 돌려준다
+      --debug             진단 로그를 stderr로 출력한다
+      --doctor            사용량 데이터 소스를 진단하고 끝낸다
+      --install-statusline
+                          Claude Code 상태줄 훅을 등록한다 (정확한 리셋 시각)
+  -V, --version           버전을 출력한다
+  -h, --help              이 도움말
+"""
+
+
+def main(argv: list[str] | None = None) -> int:
+    # 윈도우 콘솔이 cp949라 한글과 기호에서 죽는다. 도움말도 못 읽으면 의미가 없다.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    unknown = [a for a in argv if a.startswith("-") and a not in {
+        "-d", "--detach", "--debug", "--doctor", "--install-statusline",
+        "-V", "--version", "-h", "--help",
+    }]
+    if unknown or {"-h", "--help"} & set(argv):
+        if unknown:
+            print(f"모르는 옵션: {' '.join(unknown)}", file=sys.stderr)
+            print(file=sys.stderr)
+        print(USAGE, end="")
+        return 2 if unknown else 0
+
+    if {"-V", "--version"} & set(argv):
+        print(f"token fishing {__version__}")
+        return 0
+
+    if "--debug" in argv:
+        import ccpet
+
+        ccpet.DEBUG = True
+
+    if "--doctor" in argv:
+        from .plan_usage import _doctor
+
+        _doctor()
+        return 0
+
+    if "--install-statusline" in argv:
         from .statusline import install
+
         return install()
+
+    if "-d" in argv or "--detach" in argv:
+        return _detach(argv)
 
     root = tk.Tk()
     Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다

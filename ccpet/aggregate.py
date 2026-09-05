@@ -165,60 +165,102 @@ def weekly_totals(entries: Iterable[UsageEntry], now: datetime) -> Totals:
 RESET_ENV = "TOKENFISHING_RESET_AT"
 
 
-def app_usage(entries: list[UsageEntry], now: datetime) -> dict | None:
-    """데스크톱 앱의 플랜 사용량 기록에서 사용률과 창 경계를 뽑는다.
+def app_reset_floor(entries: list[UsageEntry], now: datetime) -> datetime | None:
+    """앱 기록으로 추정한 리셋 시각. 확실치 않으면 None.
 
-    이게 기본 경로다. 상태줄 훅과 달리 설치도 재시작도 필요 없고, 앱이 켜져 있는
-    동안 15분마다 알아서 쌓인다. 웹·모바일 사용량도 반영된 계정 기준 수치다.
+    앱은 사용률만 15분마다 남기고 창 경계는 안 남긴다. 그래서 "창이 비어 있던
+    마지막 시각"(plan_usage.window_floor) 뒤의 첫 요청을 창의 시작으로 본다.
+    그 첫 요청이 Claude Code 밖(웹·모바일)에서 일어났으면 몇 분 늦게 잡힌다 —
+    실측에서 약 7분 차이였다. **추정이므로 상태줄의 resets_at보다 뒤에 선다.**
 
-    창 경계는 사용률이 급락한 지점(= 이전 창 종료) 뒤의 첫 요청에서 시작한다.
-    그 첫 요청이 Claude Code 밖에서 일어났다면 몇 분 늦게 잡힌다 — 실측에서 약
-    7분 차이였다. 훅의 resets_at이 있으면 그쪽이 정확하므로 그걸 우선한다.
+    이미 지난 창이 나오면 하한을 잘못 잡은 것이므로 버린다.
     """
+    floor = plan_usage.window_floor(plan_usage.samples(), now)
+    if floor is None:
+        return None
+    after = next((e.timestamp for e in entries if e.timestamp > floor), None)
+    if after is None:
+        return None
+    reset_at = after + WINDOW
+    return reset_at if reset_at > now else None
+
+
+@dataclass(frozen=True, slots=True)
+class Official:
+    """공식 소스에서 뽑은 값 한 벌. **항목마다 출처가 다르다.**
+
+    소스 두 개는 강점이 갈린다:
+
+        상태줄 훅   resets_at이 서버가 준 정확한 값이다. 사용률도 공식.
+                    단 훅 설치와 Claude Code 재시작이 필요하고, Pro/Max에서
+                    세션 첫 응답 뒤에야 들어온다
+        앱 기록     설치도 재시작도 필요 없고 웹·모바일 사용까지 반영된다.
+                    단 15분 간격이라 창 경계는 추정할 수밖에 없다
+
+    그래서 소스를 통째로 고르지 않고 **항목별로** 고른다. 한때는 앱 기록을
+    통째로 1순위에 두고, 그쪽이 창 경계를 못 구하면 사용률까지 같이 버렸다.
+    경계와 사용률은 서로 독립인데도 그랬다 — 앱이 몇 시간 꺼져 있으면 공식
+    사용률을 손에 들고도 화면 전체가 어림으로 떨어졌다.
+    """
+
+    reset_at: datetime | None = None
+    reset_exact: bool = False
+    """리셋 시각이 서버가 준 값인가. False면 추정이라 화면에 ~를 붙인다."""
+
+    used_percentage: float | None = None
+    weekly_percentage: float | None = None
+    weekly_reset_at: datetime | None = None
+
+    source: str = "none"
+    """사용률이 어디서 왔나: "hook" | "app" | "none".
+
+    none이면 화면이 어림값으로 떨어진다. **왜 떨어졌는지 화면에 밝힌다** —
+    "어림"만 뜨고 이유가 없으면 훅이 없는 건지 앱이 꺼진 건지 알 수가 없다.
+    실제로 재현이 안 되는 어림 스크린샷을 받고 나서 넣었다."""
+
+
+def resolve_official(entries: list[UsageEntry], now: datetime) -> Official:
+    """항목별로 가장 믿을 만한 출처를 골라 한 벌로 묶는다."""
+    hook = official_limits(now)
     rows = plan_usage.samples()
     sample = plan_usage.latest(rows)
-    if sample is None:
-        return None
 
-    boundary = plan_usage.last_reset_before(rows, now)
-    if boundary is None:
-        # 리셋 지점을 못 찾으면 창의 시작을 알 수 없다. 예전 첫 요청으로 창을 만들면
-        # 5시간을 한참 넘긴 엉뚱한 창이 나오므로 그냥 물러난다.
-        return None
-    after = [e for e in entries if e.timestamp > boundary]
-    if not after:
-        return None
-    start = after[0].timestamp
-    reset_at = start + WINDOW
-    reset_exact = False
-
-    # 훅이 살아 있으면 리셋 시각만은 그쪽이 정확하다.
-    hook = official_limits(now)
+    # --- 리셋 시각: 서버가 준 값 > 손으로 꽂은 값 > 앱 기록 추정 ---
+    reset_at, reset_exact = None, False
     if hook is not None:
         reset_at, reset_exact = hook["reset_at"], True
     elif (pin := pinned_reset(now)) is not None and now < pin:
         reset_at, reset_exact = pin, True
+    else:
+        reset_at = app_reset_floor(entries, now)
 
-    if reset_at <= now:
-        return None
+    # --- 5시간 사용률: 상태줄(실시간) > 앱 기록(최대 15분 뒤처짐) ---
+    #
+    # 앱 샘플에는 손대지 않는다. 조업량으로 한도를 역산해 뒤처진 만큼 보정하는
+    # 코드가 한때 있었는데, 못 보는 웹·모바일 사용이 눈금을 망가뜨려 100%로
+    # 튀었다 (근거는 plan_usage 모듈 도크스트링). 신선도가 필요하면 훅을 쓴다.
+    used = plan_usage.clean_pct(hook["used_percentage"]) if hook else None
+    source = "hook" if used is not None else "none"
+    if used is None and sample is not None:
+        used = plan_usage.clean_pct(sample.five_hour)
+        source = "app" if used is not None else "none"
 
-    def catch_through(upto: datetime) -> int:
-        return sum(
-            e.input_tokens + e.output_tokens
-            for e in entries
-            if reset_at - WINDOW <= e.timestamp <= upto
-        )
+    # --- 주간: 상태줄 > 앱 기록 ---
+    weekly = hook["weekly"] if hook else {}
+    weekly_pct = plan_usage.clean_pct(weekly.get("used_percentage"))
+    if weekly_pct is None and sample is not None:
+        weekly_pct = plan_usage.clean_pct(sample.seven_day)
 
-    pct = plan_usage.calibrated_percentage(
-        sample, catch_through(sample.at), catch_through(now)
-    )
-    return {
-        "reset_at": reset_at,
-        "reset_exact": reset_exact,
-        # 눈금을 맞출 수 없으면 샘플 값을 그대로 쓴다 (최대 15분 뒤처짐).
-        "used_percentage": pct if pct is not None else sample.five_hour,
-        "weekly_percentage": sample.seven_day,
-    }
+    weekly_reset = None
+    if weekly.get("resets_at") is not None:
+        try:
+            weekly_reset = datetime.fromtimestamp(
+                float(weekly["resets_at"]), timezone.utc
+            )
+        except (TypeError, ValueError, OSError):
+            weekly_reset = None
+
+    return Official(reset_at, reset_exact, used, weekly_pct, weekly_reset, source)
 
 
 def official_limits(now: datetime) -> dict | None:
@@ -381,6 +423,9 @@ class Snapshot:
     used_percentage: float | None = None
     """5시간 창 사용률(0~100). 공식 수치가 있을 때만 채워진다. 추정하지 않는다."""
 
+    official_source: str = "none"
+    """사용률의 출처: "hook" | "app" | "none". 화면이 이유를 밝히는 데 쓴다."""
+
     weekly_percentage: float | None = None
     weekly_reset_at: datetime | None = None
 
@@ -394,68 +439,34 @@ class Snapshot:
 
 
 def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snapshot:
+    """창 하나와 그 안의 숫자들.
+
+    출처 우선순위는 여기 없다 — resolve_official이 **항목별로** 이미 골라뒀다.
+    여기서 남은 판단은 하나뿐이다: 리셋 시각을 아는가.
+
+        안다   그 창 [reset-5h, reset)만 센다. 블록을 이어붙이지 않으므로
+               보이지 않는 사용량 때문에 경계가 밀리지 않는다
+        모른다 JSONL 블록으로 추정한다. 웹·모바일 사용이 있으면 어긋난다
+
+    사용률은 이 판단과 무관하다. 창 경계를 몰라도 공식 사용률은 공식이다.
+    """
     now = now or datetime.now(timezone.utc)
     entries = list(entries)
-    rate = burn_rate(entries, now)
+    official = resolve_official(entries, now)
 
-    # 1순위: 데스크톱 앱의 플랜 사용량 기록. 설치도 재시작도 필요 없이 살아 있다.
-    app = app_usage(entries, now)
-    if app is not None:
-        return Snapshot(
-            window=anchored_window(entries, app["reset_at"]),
-            tokens_per_minute=rate,
-            now=now,
-            pinned=app["reset_exact"],
-            used_percentage=app["used_percentage"],
-            weekly_percentage=app["weekly_percentage"],
-        )
-
-    # 2순위: 상태줄 훅이 받아둔 공식 수치.
-    official = official_limits(now)
-    if official is not None:
-        weekly = official["weekly"]
-
-        # 공식 사용률은 있으면 그냥 쓴다.
-        #
-        # 한때 "캡처 이후 요청이 있으면 버린다"는 규칙을 뒀다가 오히려 망가졌다.
-        # 상태줄 훅은 대화가 오갈 때마다 다시 실행되므로, 읽는 시점에는 거의 항상
-        # 그 뒤에 요청이 하나쯤 있다. 그래서 공식 값이 매번 버려지고 훨씬 부정확한
-        # 플랜 근사로 떨어졌다 — 실측에서 공식 75%인데 화면은 ~59%를 보여줬다.
-        #
-        # 놓쳤던 전제: **토큰은 Claude Code가 돌 때만 쓰이고, 훅도 그때 돈다.**
-        # 그러니 이 값이 오래 낡아 있을 수가 없다. 몇 초 뒤처진 공식 수치가
-        # 한참 빗나간 추정보다 언제나 낫다.
-        #
-        # 남는 사각지대는 웹/모바일 사용인데, 그건 어차피 어떤 방법으로도 못 본다.
-        return Snapshot(
-            window=anchored_window(entries, official["reset_at"]),
-            tokens_per_minute=rate,
-            now=now,
-            pinned=True,
-            used_percentage=official["used_percentage"],
-            weekly_percentage=weekly.get("used_percentage"),
-            weekly_reset_at=(
-                datetime.fromtimestamp(float(weekly["resets_at"]), timezone.utc)
-                if weekly.get("resets_at") is not None
-                else None
-            ),
-        )
-
-    # 2순위: 손으로 꽂은 리셋 시각.
-    reset = pinned_reset(now)
-    if reset is not None and now < reset:
-        return Snapshot(
-            window=anchored_window(entries, reset),
-            tokens_per_minute=rate,
-            now=now,
-            pinned=True,
-        )
-
-    # 3순위: JSONL로 추정. 보이지 않는 사용량이 있으면 어긋난다.
     return Snapshot(
-        window=current_window(build_windows(entries), now),
-        tokens_per_minute=rate,
+        window=(
+            anchored_window(entries, official.reset_at)
+            if official.reset_at is not None
+            else current_window(build_windows(entries), now)
+        ),
+        tokens_per_minute=burn_rate(entries, now),
         now=now,
+        pinned=official.reset_exact,
+        used_percentage=official.used_percentage,
+        official_source=official.source,
+        weekly_percentage=official.weekly_percentage,
+        weekly_reset_at=official.weekly_reset_at,
     )
 
 
