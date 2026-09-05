@@ -474,3 +474,50 @@ def test_leaked_epoch_never_renders_as_a_percentage():
 
     assert snap.used_percentage is None, "100%로 박히면 안 된다"
     assert snap.pinned is True, "리셋 시각 자체는 여전히 정확하다"
+
+
+def test_official_prefers_the_fresher_source():
+    """훅과 앱 중 **더 최근에 찍힌 쪽**을 쓴다.
+
+    훅을 무조건 1순위로 두면, 그 기기에서 Claude Code를 몇 시간 안 쓴 동안
+    낡은 사용률이 남아 있는데도 그걸 공식이라며 보여준다. 기기 두 대에서
+    사용률이 서로 다르게 나오던 원인이다.
+    """
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import patch
+
+    from ccpet import plan_usage
+    from ccpet.aggregate import resolve_official
+
+    now = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+    reset = now + timedelta(hours=2)
+
+    def hook(captured_min_ago):
+        return {
+            "reset_at": reset,
+            "captured_at": now - timedelta(minutes=captured_min_ago),
+            "used_percentage": 20.0,
+            "weekly": {"used_percentage": 11.0},
+        }
+
+    def app(captured_min_ago):
+        return plan_usage.Sample(
+            at=now - timedelta(minutes=captured_min_ago), five_hour=70.0, seven_day=44.0
+        )
+
+    # 훅이 더 최신이면 훅
+    with patch("ccpet.aggregate.official_limits", return_value=hook(1)), \
+         patch("ccpet.plan_usage.samples", return_value=[app(90)]):
+        off = resolve_official([], now)
+    assert (off.source, off.used_percentage) == ("hook", 20.0)
+    assert off.weekly_percentage == 11.0, "주간도 같은 출처를 따라가야 한다"
+
+    # 앱이 더 최신이면 앱 — 훅 값이 살아 있어도 낡았으면 안 쓴다
+    with patch("ccpet.aggregate.official_limits", return_value=hook(180)), \
+         patch("ccpet.plan_usage.samples", return_value=[app(2)]):
+        off = resolve_official([], now)
+    assert (off.source, off.used_percentage) == ("app", 70.0)
+    assert off.weekly_percentage == 44.0, "주간이 5시간과 다른 시점을 가리키면 안 된다"
+
+    # 나이를 들고 다녀야 화면이 낡았다고 밝힐 수 있다
+    assert off.captured_at == now - timedelta(minutes=2)

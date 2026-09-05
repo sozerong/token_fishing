@@ -69,14 +69,42 @@ function Invoke-Python {
     & $exe @all
 }
 
-function Test-OnPath {
-    if (Get-Command $Command -ErrorAction SilentlyContinue) { return }
-    Write-Warn "$Command is installed but not on your PATH yet."
-    $scripts = Invoke-Python @('-c', 'import site, os; print(os.path.join(site.USER_BASE, "Scripts"))')
-    Write-Info 'Add it for this session:'
-    Write-Info "    `$env:PATH += `";$scripts`""
-    Write-Info 'Or permanently, then open a new terminal:'
-    Write-Info "    setx PATH `"`$env:PATH;$scripts`""
+function Get-BinDir {
+    if (Get-Command pipx -ErrorAction SilentlyContinue) {
+        $dir = pipx environment --value PIPX_BIN_DIR 2>$null
+        if ($dir) { return $dir.Trim() }
+    }
+    return (Invoke-Python @('-c', 'import site, os; print(os.path.join(site.USER_BASE, "Scripts"))')).Trim()
+}
+
+function Add-ToUserPath {
+    $dir = Get-BinDir
+    if (-not $dir) { return }
+
+    # Make it work in *this* session too, so "Run it with:" is true right away.
+    if (($env:PATH -split ';') -notcontains $dir) { $env:PATH = "$dir;$env:PATH" }
+
+    # Write through the environment API, not setx: setx silently truncates a PATH
+    # longer than 1024 characters, which would quietly break unrelated tools.
+    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (($userPath -split ';') -contains $dir) {
+        Write-Info "PATH already contains $dir"
+        return
+    }
+    $updated = if ([string]::IsNullOrEmpty($userPath)) { $dir } else { "$userPath;$dir" }
+    [Environment]::SetEnvironmentVariable('PATH', $updated, 'User')
+    Write-Info "added $dir to your user PATH"
+    Write-Info '(already active here; other terminals pick it up after restart)'
+}
+
+function Remove-FromUserPath {
+    $dir = Get-BinDir
+    if (-not $dir) { return }
+    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (-not $userPath -or ($userPath -split ';') -notcontains $dir) { return }
+    $kept = ($userPath -split ';' | Where-Object { $_ -and $_ -ne $dir }) -join ';'
+    [Environment]::SetEnvironmentVariable('PATH', $kept, 'User')
+    Write-Info "removed $dir from your user PATH"
 }
 
 # ------------------------------------------------------------------- operations
@@ -97,6 +125,8 @@ function Invoke-Install {
         Invoke-Python @('-m', 'pip', 'install', '--user', '--upgrade', $RepoDir) | Out-Null
     }
 
+    Add-ToUserPath
+
     # The hook stores an absolute path to the installed file, so it has to be
     # re-registered after every install - the path changes when the venv does.
     Write-Bold 'Registering the Claude Code statusline hook'
@@ -107,7 +137,9 @@ function Invoke-Install {
     }
 
     Write-Bold 'Done'
-    Test-OnPath
+    if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
+        Write-Warn "$Command is still not on PATH - open a new terminal and try again."
+    }
     Write-Info "Run it with:            $Command"
     Write-Info "Pet screen:             $Command --animal"
     Write-Info "Keep your shell free:   $Command -d"
@@ -139,6 +171,8 @@ function Invoke-Uninstall {
     } else {
         Invoke-Python @('-m', 'pip', 'uninstall', '-y', $Package) 2>$null | Out-Null
     }
+
+    Remove-FromUserPath
 
     Write-Bold 'Done'
     Write-Info 'Your Claude Code transcripts in ~\.claude\projects were not touched.'

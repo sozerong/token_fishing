@@ -225,6 +225,18 @@ class Official:
     weekly_percentage: float | None = None
     weekly_reset_at: datetime | None = None
 
+    captured_at: datetime | None = None
+    """사용률을 **언제 받아둔 값인가.**
+
+    공식 수치라고 해서 지금 값인 건 아니다. 훅은 Claude Code가 상태줄을 그릴 때만
+    돌고, 앱 기록은 앱이 켜져 있을 때만 갱신된다. 그래서 그 기기에서 한동안
+    Claude Code를 안 쓰면 몇 시간 전 사용률이 그대로 남아 있다 — 창이 아직
+    안 끝났으므로 유효성 검사도 통과한다.
+
+    기기 두 대에서 같은 계정을 쓰는데 사용률이 서로 다르게 나오는 원인이 이것이다.
+    값 자체는 계정 기준이라 맞지만 **찍힌 시각이 다르다.** 그래서 나이를 같이
+    들고 다니고, 오래된 값은 화면에서 오래됐다고 밝힌다."""
+
     source: str = "none"
     """사용률이 어디서 왔나: "hook" | "app" | "none".
 
@@ -248,22 +260,38 @@ def resolve_official(entries: list[UsageEntry], now: datetime) -> Official:
     else:
         reset_at = app_reset_floor(entries, now)
 
-    # --- 5시간 사용률: 상태줄(실시간) > 앱 기록(최대 15분 뒤처짐) ---
+    # --- 5시간 사용률: 둘 중 **더 최근에 찍힌 쪽** ---
     #
-    # 앱 샘플에는 손대지 않는다. 조업량으로 한도를 역산해 뒤처진 만큼 보정하는
-    # 코드가 한때 있었는데, 못 보는 웹·모바일 사용이 눈금을 망가뜨려 100%로
-    # 튀었다 (근거는 plan_usage 모듈 도크스트링). 신선도가 필요하면 훅을 쓴다.
-    used = plan_usage.clean_pct(hook["used_percentage"]) if hook else None
-    source = "hook" if used is not None else "none"
-    if used is None and sample is not None:
-        used = plan_usage.clean_pct(sample.five_hour)
-        source = "app" if used is not None else "none"
+    # 예전에는 훅을 무조건 1순위로 뒀는데, 훅 값은 Claude Code가 상태줄을 그릴 때만
+    # 갱신된다. 그 기기에서 Claude Code를 몇 시간 안 쓰면 낡은 사용률이 남아 있고,
+    # 창이 아직 안 끝났으니 유효성 검사도 통과해 버린다. 그동안 앱이 켜져 있었다면
+    # 앱 기록이 훨씬 최신인데도 낡은 훅 값을 썼다.
+    #
+    # 앱 샘플 값 자체에는 손대지 않는다. 조업량으로 한도를 역산해 뒤처진 만큼
+    # 보정하는 코드가 한때 있었는데, 못 보는 웹·모바일 사용이 눈금을 망가뜨려
+    # 100%로 튀었다 (근거는 plan_usage 모듈 도크스트링).
+    hook_pct = plan_usage.clean_pct(hook["used_percentage"]) if hook else None
+    hook_at = hook["captured_at"] if hook else None
+    app_pct = plan_usage.clean_pct(sample.five_hour) if sample is not None else None
+    app_at = sample.at if sample is not None else None
 
-    # --- 주간: 상태줄 > 앱 기록 ---
+    used, source, captured_at = None, "none", None
+    if hook_pct is not None and (
+        app_pct is None or app_at is None or hook_at is None or hook_at >= app_at
+    ):
+        used, source, captured_at = hook_pct, "hook", hook_at
+    elif app_pct is not None:
+        used, source, captured_at = app_pct, "app", app_at
+
+    # --- 주간: 사용률과 같은 출처를 따라간다 ---
+    # 5시간은 훅, 주간은 앱처럼 섞으면 두 숫자가 서로 다른 시점을 가리킨다.
     weekly = hook["weekly"] if hook else {}
-    weekly_pct = plan_usage.clean_pct(weekly.get("used_percentage"))
-    if weekly_pct is None and sample is not None:
+    if source == "app" and sample is not None:
         weekly_pct = plan_usage.clean_pct(sample.seven_day)
+    else:
+        weekly_pct = plan_usage.clean_pct(weekly.get("used_percentage"))
+        if weekly_pct is None and sample is not None:
+            weekly_pct = plan_usage.clean_pct(sample.seven_day)
 
     weekly_reset = None
     if weekly.get("resets_at") is not None:
@@ -274,7 +302,9 @@ def resolve_official(entries: list[UsageEntry], now: datetime) -> Official:
         except (TypeError, ValueError, OSError):
             weekly_reset = None
 
-    return Official(reset_at, reset_exact, used, weekly_pct, weekly_reset, source)
+    return Official(
+        reset_at, reset_exact, used, weekly_pct, weekly_reset, captured_at, source
+    )
 
 
 def official_limits(now: datetime) -> dict | None:
@@ -420,6 +450,12 @@ class Snapshot:
     official_source: str = "none"
     """사용률의 출처: "hook" | "app" | "none". 화면이 이유를 밝히는 데 쓴다."""
 
+    official_age_min: int | None = None
+    """공식 사용률을 받아둔 지 몇 분 됐나. None이면 공식 수치가 없다는 뜻.
+
+    값이 크면 그 기기에서 Claude Code를 한동안 안 쓴 것이다 — 숫자는 계정
+    기준이라 맞지만 그 시점 기준이라, 다른 기기와 안 맞아 보이는 이유가 된다."""
+
     weekly_percentage: float | None = None
     weekly_reset_at: datetime | None = None
 
@@ -459,6 +495,10 @@ def snapshot(entries: Iterable[UsageEntry], now: datetime | None = None) -> Snap
         pinned=official.reset_exact,
         used_percentage=official.used_percentage,
         official_source=official.source,
+        official_age_min=(
+            None if official.captured_at is None
+            else max(0, int((now - official.captured_at).total_seconds() // 60))
+        ),
         weekly_percentage=official.weekly_percentage,
         weekly_reset_at=official.weekly_reset_at,
     )

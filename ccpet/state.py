@@ -87,6 +87,12 @@ class GameState:
     fill_source: str = "none"
     """"official" | "learned" | "none". 어디서 온 숫자인지 화면에서 밝힌다."""
 
+    official_age_min: int | None = None
+    """공식 사용률을 받아둔 지 몇 분 됐나. 오래됐으면 화면이 그렇다고 밝힌다.
+
+    기기가 두 대면 여기서 갈린다 — 값은 계정 기준이라 맞지만 그 기기가
+    마지막으로 받아둔 시점이 다르다."""
+
     official_source: str = "none"
     """공식 사용률의 출처: "hook" | "app" | "none".
 
@@ -173,6 +179,7 @@ def to_game_state(
         fill=fill,
         fill_source=fill_source,
         official_source=snap.official_source,
+        official_age_min=snap.official_age_min,
         used_percentage=snap.used_percentage,
         weekly_percentage=snap.weekly_percentage,
         weekly_catch=weekly_catch,

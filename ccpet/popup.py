@@ -31,6 +31,12 @@ SEA = themes.HORIZON        # 지평선. 테마가 배경을 그리려면 같은
 REFRESH_SEC = 10
 FRAME_MS = 66            # 약 15fps. 도트 화면에 그 이상은 필요 없다.
 
+STALE_MIN = 15
+"""공식 수치가 이보다 오래됐으면 제목에 나이를 적는다.
+
+앱 기록이 15분 간격이라 그 안쪽은 정상 지연이다. 그보다 오래됐다는 건 그 기기가
+한동안 Claude Code를 안 썼다는 뜻이고, 그때부터 다른 기기와 숫자가 갈린다."""
+
 ACTIVITY_SPEED = (0.10, 0.22, 0.45, 0.85)
 """활동 등급(4단계) → 움직이는 속도. 등급 이름은 테마마다 다르므로 순번으로 찾는다."""
 
@@ -107,6 +113,11 @@ class Popup:
         s = self.state
         if s.fill_source == "official":
             where = {"hook": "공식·훅", "app": "공식·앱"}.get(s.official_source, "공식")
+            # 공식 수치라도 지금 값은 아니다. 그 기기에서 Claude Code를 한동안
+            # 안 쓰면 몇 시간 전 값이 그대로 남는다 — 다른 기기와 안 맞아 보이는
+            # 이유가 이것이라, 낡았으면 낡았다고 적는다.
+            if s.official_age_min is not None and s.official_age_min >= STALE_MIN:
+                where += f" {s.official_age_min}분 전"
         else:
             # 왜 공식이 아닌지 적는다. "어림"만 뜨면 훅이 없는 건지 앱이 꺼진
             # 건지 알 수가 없어서, 재현 안 되는 화면을 붙들고 시간을 버렸다.

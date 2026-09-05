@@ -64,13 +64,77 @@ check_tkinter() {
     esac
 }
 
-on_path_hint() {
-    command -v "$COMMAND" >/dev/null 2>&1 && return 0
-    warn "$COMMAND is installed but not on your PATH yet."
-    local bindir
-    bindir="$("$PYTHON" -c 'import site, os; print(os.path.join(site.USER_BASE, "bin"))' 2>/dev/null || echo "$HOME/.local/bin")"
-    info "Add this to your ~/.bashrc or ~/.zshrc, then open a new terminal:"
-    info "    export PATH=\"$bindir:\$PATH\""
+MARKER="# added by token fishing installer"
+
+shell_rc() {
+    # Where a login shell would pick up an export. zsh reads .zshrc; bash on
+    # macOS reads .bash_profile for login shells, .bashrc elsewhere.
+    case "$(basename "${SHELL:-bash}")" in
+        zsh) echo "$HOME/.zshrc" ;;
+        *)
+            if [ "$(uname -s)" = "Darwin" ]; then
+                echo "$HOME/.bash_profile"
+            else
+                echo "$HOME/.bashrc"
+            fi
+            ;;
+    esac
+}
+
+bin_dir() {
+    if command -v pipx >/dev/null 2>&1; then
+        pipx environment --value PIPX_BIN_DIR 2>/dev/null && return 0
+    fi
+    "$PYTHON" -c 'import site, os; print(os.path.join(site.USER_BASE, "bin"))' 2>/dev/null \
+        || echo "$HOME/.local/bin"
+}
+
+add_to_path() {
+    local bindir rc
+    bindir="$(bin_dir)"
+    [ -n "$bindir" ] || return 0
+
+    # Make it work in *this* shell too, so the "Run it with:" line below is true
+    # immediately and not only after the user opens a new terminal.
+    case ":$PATH:" in
+        *":$bindir:"*) ;;
+        *) export PATH="$bindir:$PATH" ;;
+    esac
+
+    rc="$(shell_rc)"
+    if [ -f "$rc" ] && grep -qF "$bindir" "$rc"; then
+        info "PATH already set up in $rc"
+        return 0
+    fi
+    printf '\n%s\nexport PATH="%s:$PATH"\n' "$MARKER" "$bindir" >> "$rc"
+    info "added $bindir to PATH in $rc"
+    info "(already active here; other terminals pick it up after restart)"
+}
+
+remove_from_path() {
+    local rc
+    rc="$(shell_rc)"
+    [ -f "$rc" ] || return 0
+    grep -qF "$MARKER" "$rc" || return 0
+    # Drop the marker and the export line that follows it, leave the rest alone.
+    "$PYTHON" - "$rc" "$MARKER" <<'PY'
+import sys
+path, marker = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as f:
+    lines = f.readlines()
+out, skip = [], 0
+for line in lines:
+    if skip:
+        skip -= 1
+        continue
+    if line.strip() == marker:
+        skip = 1          # also drop the export line right after it
+        continue
+    out.append(line)
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(out)
+PY
+    info "removed the PATH entry from $rc"
 }
 
 # ------------------------------------------------------------------- operations
@@ -82,10 +146,13 @@ do_install() {
     if command -v pipx >/dev/null 2>&1; then
         info "using pipx (isolated environment)"
         pipx install --force "$REPO_DIR" >/dev/null
+        pipx ensurepath >/dev/null 2>&1 || true
     else
         info "using pip --user (install pipx for an isolated environment)"
         "$PYTHON" -m pip install --user --upgrade "$REPO_DIR" >/dev/null
     fi
+
+    add_to_path
 
     # The hook stores an absolute path to the installed file, so it has to be
     # re-registered after every install - the path changes when the venv does.
@@ -97,7 +164,9 @@ do_install() {
     fi
 
     bold "Done"
-    on_path_hint
+    if ! command -v "$COMMAND" >/dev/null 2>&1; then
+        warn "$COMMAND is still not on PATH - open a new terminal and try again."
+    fi
     info "Run it with:            $COMMAND"
     info "Pet screen:             $COMMAND --animal"
     info "Keep your shell free:   $COMMAND -d"
@@ -129,6 +198,8 @@ do_uninstall() {
     else
         "$PYTHON" -m pip uninstall -y "$PACKAGE" >/dev/null 2>&1 || true
     fi
+
+    remove_from_path
 
     bold "Done"
     info "Your Claude Code transcripts in ~/.claude/projects were not touched."

@@ -159,9 +159,10 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 That is the whole setup. The script picks a Python 3.11+ interpreter, warns you if
 tkinter is missing (with the exact command for your platform), installs the package —
-through `pipx` if you have it, otherwise `pip --user` — registers the Claude Code
-statusline hook so the numbers are exact, and tells you what to add to `PATH` if the
-command is not visible yet.
+through `pipx` if you have it, otherwise `pip --user` — **adds the install directory to
+your `PATH`** (in your shell rc file on macOS/Linux, in your user environment on Windows,
+and in the current session so it works immediately), and registers the Claude Code
+statusline hook so the numbers are exact.
 
 It installs two commands: `tokenfishing` (the window) and `tokenfishing-console`
 (plain text output).
@@ -220,9 +221,9 @@ bash install.sh uninstall       # Windows: powershell -File install.ps1 uninstal
 ```
 
 This removes the commands, unregisters the statusline hook from `~/.claude/settings.json`
-(leaving the rest of your settings alone), and deletes the two files this tool created —
-`tokenfishing-config.json` and `tokenfishing-limits.json`. Your Claude Code transcripts
-under `~/.claude/projects` are never touched.
+(leaving the rest of your settings alone), takes the `PATH` entry back out, and deletes the
+two files this tool created — `tokenfishing-config.json` and `tokenfishing-limits.json`.
+Your Claude Code transcripts under `~/.claude/projects` are never touched.
 
 If you installed manually, the same cleanup is available on its own:
 
@@ -301,9 +302,14 @@ always tells you which one is in play:
 
 | Source | Title shows | How exact |
 |---|---|---|
-| Statusline hook | `official·hook` | **Exact.** Claude Code reports `rate_limits` directly |
-| Desktop app history | `official·app` | Exact as of the app's last write; can lag behind |
+| Statusline hook | `official·hook` | **Exact**, as of the last time Claude Code drew its statusline |
+| Desktop app history | `official·app` | Exact as of the app's last write (roughly every 15 minutes) |
 | Neither | `estimate (no official numbers)` | Estimated from a learned limit — may drift |
+
+Whichever of the two was captured **more recently** wins, and the 5-hour and weekly figures
+always come from the same capture so they never describe two different moments. If the
+number is more than 15 minutes old, the title says how old — `official·hook 47분 전` — so a
+figure that looks out of date is visibly out of date rather than quietly wrong.
 
 Run `tokenfishing --install-statusline` once to register the hook. This is the
 recommended setup: **numbers taken through the Claude Code CLI hook are exact.**
@@ -332,6 +338,12 @@ different slice — but not of everything:
 There is no combined view. Install the statusline hook on **every** machine: without it a
 machine falls back to estimating the limit from its own partial token count, which comes
 out too low.
+
+The percentages agree only as far as each machine's last capture goes. The hook updates
+when Claude Code draws its statusline, so a machine you have not touched for hours is
+still holding the figure from back then — correct for the account, but stale. That is why
+the title prints the age once it passes 15 minutes: when two machines disagree, the one
+with the fresher capture is the one to believe.
 
 ### Does it work outside Korea?
 
