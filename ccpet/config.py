@@ -1,7 +1,8 @@
 """팝업에서 토글한 선택을 기억한다. 파일 하나, 키 두 개.
 
-    mode           "catch"     쓸수록 바다에 물고기가 늘어난다
-                   "depletion" 쓸수록 바다에서 물고기가 사라진다
+    mode           "catch"     쓸수록 화면이 채워진다
+                   "depletion" 쓸수록 화면이 비어 간다
+    theme          화면 컨셉 키 ("fishing", "village", ...). themes 모듈 참고
     learned_limit  공식 사용률에서 역산한 이 계정의 5시간 한도
 """
 
@@ -11,6 +12,8 @@ import json
 import os
 import tempfile
 from pathlib import Path
+
+from . import themes
 
 CONFIG_PATH = Path.home() / ".claude" / "tokenfishing-config.json"
 
@@ -24,7 +27,7 @@ MIN_PCT_TO_LEARN = 10.0
 """이 사용률 아래에서는 한도를 역산하지 않는다.
 
 3%일 때 나눗셈을 하면 작은 오차가 크게 튄다. 어느 정도 찬 뒤에 재는 게 안정적이다."""
-DEFAULTS = {"mode": CATCH, "learned_limit": None}
+DEFAULTS = {"mode": CATCH, "theme": themes.DEFAULT, "learned_limit": None}
 
 
 def load() -> dict:
@@ -36,6 +39,8 @@ def load() -> dict:
     if isinstance(saved, dict):
         if saved.get("mode") in MODES:
             data["mode"] = saved["mode"]
+        if saved.get("theme") in themes.THEMES:
+            data["theme"] = saved["theme"]
         limit = saved.get("learned_limit")
         if isinstance(limit, (int, float)) and limit > 0:
             data["learned_limit"] = int(limit)

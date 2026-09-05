@@ -23,6 +23,7 @@ from pathlib import Path
 
 from . import __version__, config, debug
 from .state import GameState, build_state
+from . import themes
 
 SCALE = 2
 W, H = 180, 120          # 가상 도트 해상도. 실제 창은 이것의 SCALE배.
@@ -30,16 +31,14 @@ SEA = 62
 REFRESH_SEC = 10
 FRAME_MS = 66            # 약 15fps. 도트 화면에 그 이상은 필요 없다.
 
-DUSK, DAY = (26, 26, 58), (92, 160, 214)
-SEA_DUSK, SEA_DAY = (10, 18, 44), (30, 90, 140)
-FISH_COLORS = ("#e3a447", "#d96f4a", "#7ee787", "#79c0ff")
-BITE_SPEED = {"잠잠": 0.10, "잔잔": 0.22, "활발": 0.45, "폭주": 0.85}
+ACTIVITY_SPEED = (0.10, 0.22, 0.45, 0.85)
+"""활동 등급(4단계) → 움직이는 속도. 등급 이름은 테마마다 다르므로 순번으로 찾는다."""
 
 
 def _pile_slots(rows=(7, 6, 5, 4, 2)) -> list[tuple[int, int]]:
     """갑판에 쌓이는 자리. 아래가 넓고 위로 갈수록 좁아진다.
 
-    합이 MAX_FISH_DRAWN(24)이라 100%일 때 바다가 비고 더미가 꽉 찬다.
+    합이 MAX_FISH_DRAWN(24)이라 100%일 때 화면이 비고 더미가 꽉 찬다.
     """
     slots = []
     for row, count in enumerate(rows):
@@ -92,17 +91,23 @@ class Popup:
         # 토글 두 개. 누르면 바뀌고 바로 저장된다.
         bar = tk.Frame(root, bg="#0d1117")
         bar.pack(fill="x", padx=6, pady=(2, 6))
-        self.mode_btn = tk.Button(
-            bar, command=self._toggle_mode, font=("Consolas", 9),
-            bg="#21262d", fg="#c9d1d9", activebackground="#30363d",
-            relief="flat", borderwidth=0, padx=6, cursor="hand2",
-        )
-        self.mode_btn.pack(fill="x")
+
+        def button(command):
+            b = tk.Button(
+                bar, command=command, font=("Consolas", 9),
+                bg="#21262d", fg="#c9d1d9", activebackground="#30363d",
+                relief="flat", borderwidth=0, padx=6, cursor="hand2",
+            )
+            b.pack(side="left", fill="x", expand=True, padx=(0, 2))
+            return b
+
+        self.theme_btn = button(self._next_theme)
+        self.mode_btn = button(self._toggle_mode)
         self._apply_buttons()
 
         debug(f"start fill={state.fill_source} official={state.official_source} "
-               f"pct={state.used_percentage} left={state.minutes_left} "
-               f"mode={self.settings['mode']}")
+              f"pct={state.used_percentage} left={state.minutes_left} "
+              f"mode={self.settings['mode']} theme={self.settings['theme']}")
         self._apply_text()
         self._start_refresh()
         self._tick()
@@ -126,7 +131,18 @@ class Popup:
     # ---- 토글 ----
 
     def _apply_buttons(self) -> None:
-        self.mode_btn.configure(text=f"모드: {config.MODE_LABELS[self.settings['mode']]}")
+        self.theme_btn.configure(text=self.theme.name)
+        self.mode_btn.configure(text=config.MODE_LABELS[self.settings["mode"]])
+
+    @property
+    def theme(self) -> themes.Theme:
+        return themes.get(self.settings.get("theme"))
+
+    def _next_theme(self) -> None:
+        self.settings["theme"] = config.next_in(
+            themes.THEME_KEYS, self.settings.get("theme", themes.DEFAULT)
+        )
+        self._commit_settings()
 
     def _toggle_mode(self) -> None:
         self.settings["mode"] = config.next_in(config.MODES, self.settings["mode"])
@@ -135,7 +151,11 @@ class Popup:
     def _commit_settings(self) -> None:
         config.save(self.settings)
         self.state = build_state(self.settings)
+        # 테마가 바뀌면 색과 속도가 통째로 달라진다. 남겨두면 이전 테마의
+        # 것들이 새 화면에 섞여 돌아다닌다.
+        self.fish.clear()
         self._sync_fish()
+        self.root.title(self._title())
         self._apply_buttons()
         self._apply_text()
 
@@ -167,19 +187,24 @@ class Popup:
         self._stop.set()
         self.root.destroy()
 
+    def _speed(self) -> float:
+        """활동 등급 → 속도. 등급 이름은 테마마다 다르므로 표에서 순번을 찾는다."""
+        names = [n for _, n in self.theme.activity_tiers]
+        index = names.index(self.state.bite) if self.state.bite in names else 1
+        return ACTIVITY_SPEED[index]
+
     def _new_fish(self) -> dict:
-        speed = BITE_SPEED.get(self.state.bite, 0.2)
         return {
             "x": random.uniform(4, W - 12),
             "y": random.uniform(SEA + 6, H - 8),
             "dir": random.choice((-1, 1)),
-            "s": speed * random.uniform(0.6, 1.4),
-            "c": random.choice(FISH_COLORS),
+            "s": self._speed() * random.uniform(0.6, 1.4),
+            "c": random.choice(self.theme.unit_colors),
             "phase": random.uniform(0, 6.28),      # 위아래 흔들림이 겹치지 않게
         }
 
     def _sync_fish(self) -> None:
-        """마리 수를 맞춘다. 늘어난 만큼만 새로 넣고 기존 물고기는 그대로 헤엄친다."""
+        """개수를 맞춘다. 늘어난 만큼만 새로 넣고 기존 것들은 그대로 움직인다."""
         n = self.state.fish
         while len(self.fish) > n:
             self.fish.pop()
@@ -189,7 +214,7 @@ class Popup:
     def _apply_text(self) -> None:
         s = self.state
         if not s.is_fishing:
-            self.labels["catch"].configure(text="— 조업 종료", fg="#6e7681")
+            self.labels["catch"].configure(text="— 창 종료", fg="#6e7681")
         elif s.fill is None:
             # 사용률을 모른다. 퍼센트를 지어내지 않고 절대량만 보여준다.
             self.labels["catch"].configure(text=f"{s.catch:,} 토큰", fg="#7ee787")
@@ -203,8 +228,9 @@ class Popup:
             )
         # 마리 수는 화면에 그려져 있다. 숫자로 또 적지 않는다.
         self.labels["tier"].configure(text=s.tier)
+        look = self.theme
         self.labels["bite"].configure(
-            text=f"입질 {s.bite} · 캐스팅 {s.casts:,}회"
+            text=f"{look.activity_word} {s.bite} · {look.action_word} {s.casts:,}회"
         )
         # 추정값을 확실한 척 보여주지 않는다. ~ 가 붙어 있으면 틀릴 수 있다는 뜻.
         mark = "" if s.pinned else "~"
@@ -228,24 +254,25 @@ class Popup:
         )
 
     def _draw(self) -> None:
-        s, t = self.state, self.frame
+        """뼈대는 모든 테마가 같다. 색과 스프라이트만 테마에서 가져온다."""
+        s, t, look = self.state, self.frame, self.theme
         self.canvas.delete("all")
         d = s.daylight if s.is_fishing else 0.0
 
-        self._px(0, 0, W, SEA, _mix(DUSK, DAY, d))
-
+        # 하늘과 해 — 남은 시간이 많을수록 해가 높고 하늘이 밝다.
+        self._px(0, 0, W, SEA, _mix(*look.sky, d))
         sx, sy = 26 + (1 - d) * (W - 60), 8 + (1 - d) * (SEA - 22)
-        sun = "#ffd76e" if d > 0.35 else "#ff9a5a"
+        sun = look.sun[0] if d > 0.35 else look.sun[1]
         self._px(sx, sy, 11, 11, sun)
         self._px(sx + 2, sy - 1, 7, 13, sun)
 
-        sea_color = _mix(SEA_DUSK, SEA_DAY, d)
-        self._px(0, SEA, W, H - SEA, sea_color)
-
+        # 바닥과 지평선 잔무늬
+        self._px(0, SEA, W, H - SEA, _mix(*look.ground, d))
+        edge = look.horizon if d > 0.35 else look.horizon_dusk
         for x in range(0, W, 2):
-            y = SEA + math.sin((x + t * 2) * 0.18) * 1.6
-            self._px(x, y, 2, 2, "#8fb8d8" if d > 0.35 else "#5a6b8c")
+            self._px(x, SEA + math.sin((x + t * 2) * 0.18) * 1.6, 2, 2, edge)
 
+        # 돌아다니는 것들
         for f in self.fish:
             f["x"] += f["dir"] * f["s"]
             if f["x"] < 2:
@@ -253,31 +280,17 @@ class Popup:
             if f["x"] > W - 10:
                 f["x"], f["dir"] = W - 10, -1
             y = f["y"] + math.sin(t * 0.25 + f["phase"]) * 1.2
-            back = -1 if f["dir"] > 0 else 5
-            fork = back + (-1 if f["dir"] > 0 else 1)
-            self._px(f["x"], y, 5, 3, f["c"])
-            self._px(f["x"] + back, y, 1, 3, f["c"])
-            self._px(f["x"] + fork, y - 1, 1, 1, f["c"])
-            self._px(f["x"] + fork, y + 3, 1, 1, f["c"])
-            self._px(f["x"] + (3 if f["dir"] > 0 else 1), y + 1, 1, 1, "#0d1117")
+            look.sprite(self._px, f["x"], y, f["c"], f["dir"])
 
+        # 고정물. 살짝 흔들려야 정지 화면으로 안 보인다.
         bob = math.sin(t * 0.2) * 1.2
         bx, by = 16, SEA - 8 + bob
-        self._px(bx, by + 6, 46, 5, "#6b4423")          # 선체
-        self._px(bx + 3, by + 4, 40, 2, "#8b5a2b")      # 갑판
+        look.base(self._px, bx, by)
 
-        # 낚시꾼은 뱃머리 왼쪽. 갑판 오른쪽은 잡은 물고기 자리로 비워둔다.
-        self._px(bx + 4, by - 6, 2, 10, "#3d2a16")
-        self._px(bx + 3, by - 10, 4, 4, "#e8c39e")
-        self._px(bx + 7, by - 9, 11, 1, "#a97b4f")      # 낚싯대
-        lx, ly = bx + 18, by - 8
-        self._px(lx, ly, 1, int((SEA + 8 + bob) - ly), "#7d8590")
-        self._px(lx - 1, SEA + 7 + bob, 3, 3, "#f85149")
-
-        # 잡은 물고기가 갑판에 쌓인다. 바다에서 사라진 만큼 여기로 온다.
+        # 모아 둔 더미. 고갈 모드에서 화면에서 사라진 만큼 여기로 온다.
         # 아래 줄부터 채우고 위로 갈수록 좁아진다 — 쌓인 더미처럼 보이게.
         for i, (dx, dy) in enumerate(_PILE_SLOTS[: s.on_boat]):
-            self._px(bx + 22 + dx, by + 3 - dy, 3, 2, FISH_COLORS[i % 4])
+            self._px(bx + 30 + dx, by + 9 - dy, 3, 2, look.unit_colors[i % 4])
 
         if not s.is_fishing:
             self.canvas.create_rectangle(
