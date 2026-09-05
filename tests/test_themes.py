@@ -15,9 +15,8 @@ from ccpet import themes  # noqa: E402
 from ccpet.aggregate import Snapshot, Window  # noqa: E402
 from ccpet.state import MAX_FISH_DRAWN, to_game_state  # noqa: E402
 
-# 팝업의 가상 도트 해상도. 여기를 벗어나면 화면 밖에 그리는 것이다.
-W, H = 180, 120
-SEA = 62
+# 화면 크기는 themes 가 들고 있다. 팝업이 그걸 임포트해 쓴다.
+W, H, SEA = themes.W, themes.H, themes.HORIZON
 
 
 def snap(catch: int = 60_000, pct: float | None = 40.0) -> Snapshot:
@@ -27,14 +26,19 @@ def snap(catch: int = 60_000, pct: float | None = 40.0) -> Snapshot:
 
 
 def record(theme: themes.Theme) -> list[tuple]:
-    """스프라이트와 고정물이 찍는 도트를 전부 모은다."""
+    """한 화면을 통째로 그려서 찍힌 도트를 모은다. 배경 두 겹까지 포함한다."""
     dots: list[tuple] = []
 
     def px(x, y, w, h, color):
         dots.append((x, y, w, h, color))
 
+    for daylight in (1.0, 0.5, 0.0):        # 대낮 · 오후 · 리셋 직전
+        for frame in (0, 37, 120):
+            theme.sky_decor(px, theme, daylight, frame)
+            theme.edge(px, theme, daylight, frame)
+    top, _ = theme.unit_band
     for direction in (1, -1):
-        theme.sprite(px, W / 2, SEA + 20, theme.unit_colors[0], direction)
+        theme.sprite(px, W / 2, top + 6, theme.unit_colors[0], direction)
     theme.base(px, 16, SEA - 8)
     return dots
 
@@ -104,12 +108,29 @@ def test_unknown_theme_falls_back_instead_of_crashing():
     assert to_game_state(snap(), theme="no-such-theme").theme == "fishing"
 
 
-def test_sprites_stay_inside_the_canvas():
-    """화면 밖에 그리면 잘려서 보이지 않는다. 도트 화면에서는 바로 티가 난다."""
+def test_nothing_is_drawn_outside_the_canvas():
+    """세로로 넘치면 잘린 채 보인다. 도트 화면에서는 바로 티가 난다.
+
+    가로는 흐르는 배경(구름·차선)이 화면 밖에서 들어왔다 나가는 게 정상이므로
+    가장 넓은 요소(구름 26px) 한 개 폭만큼 여유를 준다. 그보다 크게 벗어나면
+    좌표 계산이 틀린 것이다.
+    """
+    SLACK = 40
     for key, theme in themes.THEMES.items():
         for x, y, w, h, _ in record(theme):
-            assert -1 <= x and x + w <= W + 1, f"{key}: 가로가 화면을 벗어난다 ({x}..{x + w})"
+            assert -SLACK <= x and x + w <= W + SLACK, f"{key}: 가로가 크게 벗어난다 ({x}..{x + w})"
             assert 0 <= y and y + h <= H, f"{key}: 세로가 화면을 벗어난다 ({y}..{y + h})"
+
+
+def test_units_live_where_the_theme_says():
+    """우주는 하늘에, 나머지는 지면에. 구간이 뒤집히면 화면이 말이 안 된다."""
+    for key, theme in themes.THEMES.items():
+        top, bottom = theme.unit_band
+        assert 0 <= top < bottom <= H, key
+    assert themes.SPACE.unit_band[1] < SEA, "별은 지평선 위에 떠야 한다"
+    for key in ("fishing", "village", "ranch", "garden", "mine", "city"):
+        assert themes.THEMES[key].unit_band[0] >= SEA, f"{key}: 지면 아래여야 한다"
+    assert not themes.GARDEN.unit_drifts, "심긴 꽃은 돌아다니지 않는다"
 
 
 def test_pile_and_units_add_up_in_depletion_mode():

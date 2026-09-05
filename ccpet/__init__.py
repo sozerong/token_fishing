@@ -1,6 +1,6 @@
 """Claude 사용량을 도트 화면으로 보여주는 항상-위 팝업."""
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 DEBUG = False
 """진단 로그를 stderr로 낼 것인가. `--debug` 만 이 값을 켠다.

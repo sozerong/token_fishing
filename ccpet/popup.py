@@ -26,8 +26,8 @@ from .state import GameState, build_state
 from . import themes
 
 SCALE = 2
-W, H = 180, 120          # 가상 도트 해상도. 실제 창은 이것의 SCALE배.
-SEA = 62
+W, H = themes.W, themes.H   # 가상 도트 해상도. 실제 창은 이것의 SCALE배.
+SEA = themes.HORIZON        # 지평선. 테마가 배경을 그리려면 같은 값을 봐야 한다.
 REFRESH_SEC = 10
 FRAME_MS = 66            # 약 15fps. 도트 화면에 그 이상은 필요 없다.
 
@@ -194,12 +194,15 @@ class Popup:
         return ACTIVITY_SPEED[index]
 
     def _new_fish(self) -> dict:
+        look = self.theme
+        top, bottom = look.unit_band
         return {
             "x": random.uniform(4, W - 12),
-            "y": random.uniform(SEA + 6, H - 8),
+            "y": random.uniform(top, bottom),
             "dir": random.choice((-1, 1)),
-            "s": self._speed() * random.uniform(0.6, 1.4),
-            "c": random.choice(self.theme.unit_colors),
+            # 심겨 있는 테마(정원)는 가로로 움직이지 않는다. 흔들림만 남는다.
+            "s": self._speed() * random.uniform(0.6, 1.4) if look.unit_drifts else 0.0,
+            "c": random.choice(look.unit_colors),
             "phase": random.uniform(0, 6.28),      # 위아래 흔들림이 겹치지 않게
         }
 
@@ -259,18 +262,14 @@ class Popup:
         self.canvas.delete("all")
         d = s.daylight if s.is_fishing else 0.0
 
-        # 하늘과 해 — 남은 시간이 많을수록 해가 높고 하늘이 밝다.
+        # 하늘: 바탕색만 여기서 칠하고, 그 위는 테마가 그린다.
+        # 해가 뜨는 곳도 있고 별이 뜨거나 암반 천장이 덮인 곳도 있다.
         self._px(0, 0, W, SEA, _mix(*look.sky, d))
-        sx, sy = 26 + (1 - d) * (W - 60), 8 + (1 - d) * (SEA - 22)
-        sun = look.sun[0] if d > 0.35 else look.sun[1]
-        self._px(sx, sy, 11, 11, sun)
-        self._px(sx + 2, sy - 1, 7, 13, sun)
+        look.sky_decor(self._px, look, d, t)
 
-        # 바닥과 지평선 잔무늬
+        # 바닥: 마찬가지로 바탕색 위에 테마가 결을 얹는다 (파도·풀·자갈·차선).
         self._px(0, SEA, W, H - SEA, _mix(*look.ground, d))
-        edge = look.horizon if d > 0.35 else look.horizon_dusk
-        for x in range(0, W, 2):
-            self._px(x, SEA + math.sin((x + t * 2) * 0.18) * 1.6, 2, 2, edge)
+        look.edge(self._px, look, d, t)
 
         # 돌아다니는 것들
         for f in self.fish:
