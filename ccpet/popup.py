@@ -21,7 +21,7 @@ import threading
 import tkinter as tk
 from pathlib import Path
 
-from . import __version__, config, debug
+from . import __version__, config, debug, i18n
 from .state import GameState, build_state
 from . import themes
 
@@ -50,6 +50,9 @@ class Popup:
         self.root = root
         self.state = state
         self.settings = config.load()
+        # 창이 자기 언어를 스스로 정한다. main()에만 두면 창을 직접 만드는
+        # 경로(테스트·다른 진입점)에서 라벨이 설정과 어긋난다.
+        i18n.set_lang(self.settings.get("lang"))
         self.frame = 0
         self.fish: list[dict] = []
         self._reroll_layout()
@@ -112,28 +115,29 @@ class Popup:
         """
         s = self.state
         if s.fill_source == "official":
-            where = {"hook": "공식·훅", "app": "공식·앱"}.get(s.official_source, "공식")
+            where = i18n.t({"hook": "공식·훅", "app": "공식·앱"}
+                           .get(s.official_source, "공식"))
             # 공식 수치라도 지금 값은 아니다. 그 기기에서 Claude Code를 한동안
             # 안 쓰면 몇 시간 전 값이 그대로 남는다 — 다른 기기와 안 맞아 보이는
             # 이유가 이것이라, 낡았으면 낡았다고 적는다.
             if s.official_age_min is not None and s.official_age_min >= STALE_MIN:
-                where += f" {s.official_age_min}분 전"
+                where += i18n.fmt("age", n=s.official_age_min)
         else:
             # 왜 공식이 아닌지 적는다. "어림"만 뜨면 훅이 없는 건지 앱이 꺼진
             # 건지 알 수가 없어서, 재현 안 되는 화면을 붙들고 시간을 버렸다.
-            label = {"learned": "어림", "none": "?"}.get(s.fill_source, "?")
-            where = f"{label}(공식수치 없음)"
+            label = i18n.t({"learned": "어림", "none": "?"}.get(s.fill_source, "?"))
+            where = i18n.fmt("no_official", label=label)
         return f"token fishing {__version__} · {where}"
 
     # ---- 토글 ----
 
     def _apply_buttons(self) -> None:
         base = themes.get(self.settings.get("theme"))
-        self.theme_btn.configure(text=base.name)
-        self.mode_btn.configure(text=config.MODE_LABELS[self.settings["mode"]])
+        self.theme_btn.configure(text=i18n.t(base.name))
+        self.mode_btn.configure(text=i18n.t(config.MODE_LABELS[self.settings["mode"]]))
         if base.key == "fishing":
             spot = themes.get_spot(self.settings.get("fishing_spot"))
-            self.spot_btn.configure(text=spot.name)
+            self.spot_btn.configure(text=i18n.t(spot.name))
             self.spot_btn.pack(side="left", fill="x", expand=True, padx=(0, 2), before=self.mode_btn)
         else:
             # 낚시가 아니면 배경 고를 게 없다 — 눌러도 아무 효과 없는 버튼을
@@ -217,13 +221,26 @@ class Popup:
     def _unit_band(self) -> tuple[float, float]:
         """돌아다니는 것들이 실제로 쓸 수 있는 y 구간.
 
-        더미가 화면에 있는 동안에는 그 구간(울타리·화단 안쪽)을 비켜 준다 —
-        안팎이 확실해야 동물이 울타리를 통과하는 것처럼 안 보인다."""
+        더미가 화면에 있는 동안에는 그 자리를 비켜 준다 — 안팎이 확실해야
+        동물이 울타리를 통과하거나 주민이 집을 뚫고 서 있는 것처럼 안 보인다.
+
+        더미가 위에 있는 테마(마을의 집)와 아래에 있는 테마(목장의 우리, 정원의
+        화단)가 둘 다 있어서, 남는 쪽으로 비켜 준다.
+        """
         look = self.theme
         top, bottom = look.unit_band
-        if look.pile_band and self.state.on_boat > 0:
-            bottom = max(top + 4, min(bottom, look.pile_band[0] - 6))
-        return top, bottom
+        if not look.pile_band or self.state.on_boat <= 0:
+            return top, bottom
+
+        keep_top, keep_bottom = look.pile_band
+        margin = 6                                   # 스프라이트가 y 위아래로 뻗는 만큼
+        room_above = (keep_top - margin) - top
+        room_below = bottom - (keep_bottom + margin)
+        if room_below >= room_above:
+            top = max(top, keep_bottom + margin)     # 더미 아래로 내려보낸다
+        else:
+            bottom = min(bottom, keep_top - margin)  # 더미 위로 올려보낸다
+        return top, max(top + 4, bottom)
 
     def _new_fish(self) -> dict:
         look = self.theme
@@ -262,35 +279,38 @@ class Popup:
     def _apply_text(self) -> None:
         s = self.state
         if not s.is_fishing:
-            self.labels["catch"].configure(text="— 창 종료", fg="#6e7681")
+            self.labels["catch"].configure(text=i18n.fmt("closed_line"), fg="#6e7681")
         elif s.fill is None:
             # 사용률을 모른다. 퍼센트를 지어내지 않고 절대량만 보여준다.
-            self.labels["catch"].configure(text=f"{s.catch:,} 토큰", fg="#7ee787")
+            self.labels["catch"].configure(
+                text=i18n.fmt("tokens", n=s.catch), fg="#7ee787")
         else:
             # ~ 는 플랜 눈금으로 어림한 값이라는 표시. 공식 수치면 안 붙는다.
             mark = "" if s.fill_source == "official" else "~"
             pct = s.fill * 100
             self.labels["catch"].configure(
-                text=f"{mark}{pct:.0f}%  ·  {s.catch:,} 토큰",
+                text=i18n.fmt("pct_tokens", mark=mark, pct=pct, n=s.catch),
                 fg="#f85149" if pct >= 90 else "#d29922" if pct >= 70 else "#7ee787",
             )
         # 마리 수는 화면에 그려져 있다. 숫자로 또 적지 않는다.
-        self.labels["tier"].configure(text=s.tier)
+        self.labels["tier"].configure(text=i18n.t(s.tier))
         look = self.theme
-        self.labels["bite"].configure(
-            text=f"{look.activity_word} {s.bite} · {look.action_word} {s.casts:,}회"
-        )
+        self.labels["bite"].configure(text=i18n.fmt(
+            "activity", act=i18n.t(look.activity_word), tier=i18n.t(s.bite),
+            action=i18n.t(look.action_word), n=s.casts,
+        ))
         # 추정값을 확실한 척 보여주지 않는다. ~ 가 붙어 있으면 틀릴 수 있다는 뜻.
         mark = "" if s.pinned else "~"
         self.labels["left"].configure(
-            text="리셋까지 —" if s.minutes_left is None
-            else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
+            text=i18n.fmt("reset_none") if s.minutes_left is None
+            else i18n.fmt("reset", mark=mark,
+                          h=s.minutes_left // 60, m=s.minutes_left % 60)
         )
         self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
         self.labels["weekly"].configure(
-            text=f"주간 {s.weekly_percentage:.0f}%  ·  {s.weekly_catch:,} 토큰"
+            text=i18n.fmt("weekly_pct", pct=s.weekly_percentage, n=s.weekly_catch)
             if s.weekly_percentage is not None
-            else f"주간 {s.weekly_catch:,} 토큰"
+            else i18n.fmt("weekly", n=s.weekly_catch)
         )
 
     # ---- 그리기 ----
@@ -363,7 +383,7 @@ class Popup:
                 0, 0, W * SCALE, H * SCALE, fill="#000000", stipple="gray50", width=0
             )
             self.canvas.create_text(
-                W * SCALE // 2, H * SCALE // 2, text="조업 종료",
+                W * SCALE // 2, H * SCALE // 2, text=i18n.fmt("closed"),
                 fill="#c9d1d9", font=("Consolas", 11),
             )
 
@@ -408,12 +428,14 @@ def _detach(argv: list[str]) -> int:
     return 0
 
 
-USAGE = f"""token fishing {__version__} - Claude 사용량 도트 팝업
+USAGE_KO = f"""token fishing {__version__} - Claude 사용량 도트 팝업
 
   tokenfishing [옵션]
 
 옵션
   -d, --detach            백그라운드로 띄우고 셸을 돌려준다
+      --lang ko|en        화면에 쓸 언어. 한 번 정하면 기억한다
+                          (안 주면 시스템 언어를 따른다)
       --animal            반려동물 화면으로 띄운다 (강아지·고양이·앵무새 ...)
       --debug             진단 로그를 stderr로 출력한다
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
@@ -425,6 +447,30 @@ USAGE = f"""token fishing {__version__} - Claude 사용량 도트 팝업
   -h, --help              이 도움말
 """
 
+USAGE_EN = f"""token fishing {__version__} - a pixel window for your Claude Code usage
+
+  tokenfishing [options]
+
+Options
+  -d, --detach            run in the background and hand the shell back
+      --lang ko|en        language for the window. Remembered once set
+                          (defaults to your system language)
+      --animal            open the pet screen (dog, cat, parrot, ...)
+      --debug             print diagnostics to stderr
+      --doctor            diagnose the usage data sources and exit
+      --install-statusline
+                          register the Claude Code statusline hook
+                          (needed for an exact reset time)
+      --uninstall-statusline
+                          remove the hook and the files this tool created
+  -V, --version           print the version
+  -h, --help              this help
+"""
+
+
+def usage() -> str:
+    return USAGE_KO if i18n.LANG == "ko" else USAGE_EN
+
 
 def main(argv: list[str] | None = None) -> int:
     # 윈도우 콘솔이 cp949라 한글과 기호에서 죽는다. 도움말도 못 읽으면 의미가 없다.
@@ -434,6 +480,25 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
 
+    # --lang 은 값을 하나 먹는다. 모르는 옵션 검사에서 그 값을 옵션으로 오해하지
+    # 않도록 먼저 떼어낸다.
+    lang = None
+    if "--lang" in argv:
+        at = argv.index("--lang")
+        if at + 1 < len(argv) and argv[at + 1] in i18n.CHOICES:
+            lang = argv[at + 1]
+            del argv[at:at + 2]
+        else:
+            print(f"--lang needs one of: {', '.join(i18n.CHOICES)}", file=sys.stderr)
+            return 2
+
+    # 도움말도 고른 언어로 나와야 하므로 여기서 먼저 정한다.
+    settings = config.load()
+    if lang and lang != settings.get("lang"):
+        settings["lang"] = lang
+        config.save(settings)
+    i18n.set_lang(settings.get("lang"))
+
     unknown = [a for a in argv if a.startswith("-") and a not in {
         "-d", "--detach", "--animal", "--debug", "--doctor",
         "--install-statusline", "--uninstall-statusline",
@@ -441,9 +506,12 @@ def main(argv: list[str] | None = None) -> int:
     }]
     if unknown or {"-h", "--help"} & set(argv):
         if unknown:
-            print(f"모르는 옵션: {' '.join(unknown)}", file=sys.stderr)
+            joined = " ".join(unknown)
+            print(i18n.t("모르는 옵션:") + f" {joined}"
+                  if i18n.LANG == "ko" else f"unknown option: {joined}",
+                  file=sys.stderr)
             print(file=sys.stderr)
-        print(USAGE, end="")
+        print(usage(), end="")
         return 2 if unknown else 0
 
     if {"-V", "--version"} & set(argv):

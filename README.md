@@ -33,6 +33,7 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 - [Fishing spots](#fishing-spots)
 - [Pet mode](#pet-mode)
 - [Display modes](#display-modes)
+- [Language](#language)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Updating](#updating)
@@ -111,6 +112,20 @@ The right button switches between the two.
 |---|---|
 | Accumulate | The screen fills up as you spend. *"How much have I used?"* |
 | Depletion | Starts full and empties as you spend. *"How much is left?"* |
+
+## Language
+
+The window speaks English or Korean. It follows your system language on first run, and
+you can pin it:
+
+```bash
+tokenfishing --lang en
+tokenfishing --lang ko
+```
+
+The choice is remembered, so you only pass it once. It covers everything on screen — theme
+and pet names, tier labels, the buttons, the window title — and the statusline the hook
+draws inside Claude Code.
 
 ---
 
@@ -254,6 +269,7 @@ An always-on-top window opens and refreshes every 10 seconds. Close the window t
 tokenfishing [options]
 
   -d, --detach            run in the background and return the shell immediately
+      --lang ko|en        language for the window (remembered; defaults to your system)
       --animal            open the pet screen instead of the landscape themes
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
@@ -365,10 +381,6 @@ Yes. Concretely:
 - **Weekly reset day.** Defaults to Tuesday, which is what one observed account used. This
   varies per account rather than per country — set `TOKENFISHING_WEEKLY_RESET_DAY` if your
   official screen says a different day.
-
-> **Note:** the on-screen labels are currently in Korean. The data, the maths and the
-> command-line interface are language-independent; only the wording on the canvas is not
-> translated yet.
 
 ---
 

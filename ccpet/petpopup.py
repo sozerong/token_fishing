@@ -18,7 +18,7 @@ import random
 import threading
 import tkinter as tk
 
-from . import __version__, animal, config, debug
+from . import __version__, animal, config, debug, i18n
 from .state import GameState, _level, build_state
 
 SCALE = 2
@@ -48,6 +48,9 @@ class AnimalPopup:
         self.root = root
         self.state = state
         self.settings = config.load()
+        # 창이 자기 언어를 스스로 정한다. main()에만 두면 창을 직접 만드는
+        # 경로(테스트·다른 진입점)에서 라벨이 설정과 어긋난다.
+        i18n.set_lang(self.settings.get("lang"))
         self.frame = 0
 
         self.pos = [W / 2, animal.FLOOR + 20]
@@ -106,11 +109,12 @@ class AnimalPopup:
     def _title(self) -> str:
         s = self.state
         if s.fill_source == "official":
-            where = {"hook": "공식·훅", "app": "공식·앱"}.get(s.official_source, "공식")
+            where = i18n.t({"hook": "공식·훅", "app": "공식·앱"}
+                           .get(s.official_source, "공식"))
         else:
-            label = {"learned": "어림", "none": "?"}.get(s.fill_source, "?")
-            where = f"{label}(공식수치 없음)"
-        return f"token fishing {__version__} · {self.pet.name} · {where}"
+            label = i18n.t({"learned": "어림", "none": "?"}.get(s.fill_source, "?"))
+            where = i18n.fmt("no_official", label=label)
+        return f"token fishing {__version__} · {i18n.t(self.pet.name)} · {where}"
 
     # ---- 토글 ----
 
@@ -119,8 +123,8 @@ class AnimalPopup:
         return animal.get(self.settings.get("pet"))
 
     def _apply_buttons(self) -> None:
-        self.pet_btn.configure(text=self.pet.name)
-        self.mode_btn.configure(text=config.MODE_LABELS[self.settings["mode"]])
+        self.pet_btn.configure(text=i18n.t(self.pet.name))
+        self.mode_btn.configure(text=i18n.t(config.MODE_LABELS[self.settings["mode"]]))
 
     def _next_pet(self) -> None:
         self.settings["pet"] = config.next_in(
@@ -182,31 +186,34 @@ class AnimalPopup:
     def _apply_text(self) -> None:
         s, pet = self.state, self.pet
         if not s.is_fishing:
-            self.labels["catch"].configure(text="— 사용 기록 없음", fg="#6e7681")
+            self.labels["catch"].configure(text=i18n.fmt("idle_line"), fg="#6e7681")
         elif s.fill is None:
-            self.labels["catch"].configure(text=f"{s.catch:,} 토큰", fg="#7ee787")
+            self.labels["catch"].configure(
+                text=i18n.fmt("tokens", n=s.catch), fg="#7ee787")
         else:
             mark = "" if s.fill_source == "official" else "~"
             pct = s.fill * 100
             self.labels["catch"].configure(
-                text=f"{mark}{pct:.0f}%  ·  {s.catch:,} 토큰",
+                text=i18n.fmt("pct_tokens", mark=mark, pct=pct, n=s.catch),
                 fg="#f85149" if pct >= 90 else "#d29922" if pct >= 70 else "#7ee787",
             )
         tier, bite = self._words()
-        self.labels["tier"].configure(text=tier)
-        self.labels["bite"].configure(
-            text=f"{pet.activity_word} {bite} · {pet.action_word} {s.casts:,}회"
-        )
+        self.labels["tier"].configure(text=i18n.t(tier))
+        self.labels["bite"].configure(text=i18n.fmt(
+            "activity", act=i18n.t(pet.activity_word), tier=i18n.t(bite),
+            action=i18n.t(pet.action_word), n=s.casts,
+        ))
         mark = "" if s.pinned else "~"
         self.labels["left"].configure(
-            text="리셋까지 —" if s.minutes_left is None
-            else f"리셋까지 {mark}{s.minutes_left // 60}시간 {s.minutes_left % 60}분"
+            text=i18n.fmt("reset_none") if s.minutes_left is None
+            else i18n.fmt("reset", mark=mark,
+                          h=s.minutes_left // 60, m=s.minutes_left % 60)
         )
         self.labels["left"].configure(fg="#c9d1d9" if s.pinned else "#d29922")
         self.labels["weekly"].configure(
-            text=f"주간 {s.weekly_percentage:.0f}%  ·  {s.weekly_catch:,} 토큰"
+            text=i18n.fmt("weekly_pct", pct=s.weekly_percentage, n=s.weekly_catch)
             if s.weekly_percentage is not None
-            else f"주간 {s.weekly_catch:,} 토큰"
+            else i18n.fmt("weekly", n=s.weekly_catch)
         )
 
     # ---- 상호작용 ----
@@ -294,7 +301,7 @@ class AnimalPopup:
                 0, 0, W * SCALE, H * SCALE, fill="#000000", stipple="gray50", width=0
             )
             self.canvas.create_text(
-                W * SCALE // 2, H * SCALE // 2, text="사용 기록 없음",
+                W * SCALE // 2, H * SCALE // 2, text=i18n.fmt("idle"),
                 fill="#c9d1d9", font=("Consolas", 11),
             )
 

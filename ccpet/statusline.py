@@ -69,7 +69,26 @@ def _bar(pct: float, width: int = 10) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _lang() -> str:
+    """설정 파일에서 언어만 읽는다.
+
+    i18n을 import하지 않는다 — 이 모듈은 상태줄 훅으로 **경로를 직접 지정해**
+    실행되므로(hook_command 참고) 패키지 상대 import를 하는 순간 훅이 죽는다.
+    표준 라이브러리만으로 자족해야 해서 여기서는 파일을 직접 읽는다.
+    """
+    try:
+        saved = json.loads(
+            (Path.home() / ".claude" / "tokenfishing-config.json")
+            .read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return "ko"
+    lang = saved.get("lang") if isinstance(saved, dict) else None
+    return lang if lang in ("ko", "en") else "ko"
+
+
 def _line(limits: dict, now: datetime) -> str:
+    ko = _lang() == "ko"
     parts = []
     five = limits.get("five_hour") or {}
     if five.get("used_percentage") is not None:
@@ -79,12 +98,14 @@ def _line(limits: dict, now: datetime) -> str:
         if resets:
             left = datetime.fromtimestamp(float(resets), timezone.utc) - now
             mins = max(0, int(left.total_seconds() // 60))
-            text += f" · {mins // 60}시간 {mins % 60}분 남음"
+            h, m = mins // 60, mins % 60
+            text += f" · {h}시간 {m}분 남음" if ko else f" · {h}h {m}m left"
         parts.append(text)
 
     week = limits.get("seven_day") or {}
     if week.get("used_percentage") is not None:
-        parts.append(f"주간 {float(week['used_percentage']):.0f}%")
+        pct = float(week["used_percentage"])
+        parts.append(f"주간 {pct:.0f}%" if ko else f"week {pct:.0f}%")
     return "  |  ".join(parts)
 
 

@@ -1085,6 +1085,7 @@ VILLAGE = Theme(
     base_bobs=False,                                          # 집은 안 흔들린다
     base_x_range=(4, 10),                                     # 옆으로 집 한 줄이 다 들어갈 자리
     pile=_pile_houses,                                         # 고갈 모드: 집이 한 채씩 는다
+    pile_band=(46, 74),                                        # 집이 선 자리엔 주민이 안 선다
 )
 
 RANCH = Theme(
