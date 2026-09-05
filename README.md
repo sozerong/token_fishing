@@ -35,6 +35,8 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 - [Display modes](#display-modes)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Updating](#updating)
+- [Uninstalling](#uninstalling)
 - [Usage](#usage)
 - [Accuracy: where the numbers come from](#accuracy-where-the-numbers-come-from)
 - [Configuration](#configuration)
@@ -142,26 +144,44 @@ If that prints `ModuleNotFoundError: No module named 'tkinter'`, install it:
 ### macOS / Linux
 
 ```bash
-pip3 install git+https://github.com/sozerong/token_fishing.git
+git clone https://github.com/sozerong/token_fishing.git
+cd token_fishing
+bash install.sh
 ```
 
 ### Windows
 
 ```powershell
-py -3.12 -m pip install git+https://github.com/sozerong/token_fishing.git
+git clone https://github.com/sozerong/token_fishing.git
+cd token_fishing
+powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-This installs two commands: `tokenfishing` (the window) and `tokenfishing-console`
+That is the whole setup. The script picks a Python 3.11+ interpreter, warns you if
+tkinter is missing (with the exact command for your platform), installs the package —
+through `pipx` if you have it, otherwise `pip --user` — registers the Claude Code
+statusline hook so the numbers are exact, and tells you what to add to `PATH` if the
+command is not visible yet.
+
+It installs two commands: `tokenfishing` (the window) and `tokenfishing-console`
 (plain text output).
 
+> **Do not run the installer with `sudo`** (or from an elevated PowerShell). Everything
+> this tool touches lives in your own home directory — `~/.claude`. Installing as root
+> would register the statusline hook in *root's* home, and the tool would never find your
+> usage data. The script refuses to run as root for exactly this reason.
+
 <details>
-<summary>Other ways to install</summary>
+<summary>Installing without the script</summary>
 
 ```bash
 # Isolated, without touching your global environment
 pipx install git+https://github.com/sozerong/token_fishing.git
 
-# Run once without installing
+# Or into your user site-packages
+pip3 install --user git+https://github.com/sozerong/token_fishing.git
+
+# Run once without installing anything
 uvx --from git+https://github.com/sozerong/token_fishing.git tokenfishing
 
 # From source, for hacking on it
@@ -170,8 +190,52 @@ cd token_fishing
 pip3 install -e .
 ```
 
+If you install this way, register the hook yourself — without it the window falls back to
+an estimate:
+
+```bash
+tokenfishing --install-statusline
+```
+
 When running from a source checkout, use `python3 -m ccpet` from the repository root.
 </details>
+
+## Updating
+
+```bash
+cd token_fishing
+bash install.sh update          # Windows: powershell -File install.ps1 update
+```
+
+This pulls the latest source and reinstalls. The statusline hook stores an **absolute
+path** to the installed file, so the script re-registers it every time — otherwise an
+update that moves the install location would leave Claude Code running a file that no
+longer exists.
+
+## Uninstalling
+
+```bash
+cd token_fishing
+bash install.sh uninstall       # Windows: powershell -File install.ps1 uninstall
+```
+
+This removes the commands, unregisters the statusline hook from `~/.claude/settings.json`
+(leaving the rest of your settings alone), and deletes the two files this tool created —
+`tokenfishing-config.json` and `tokenfishing-limits.json`. Your Claude Code transcripts
+under `~/.claude/projects` are never touched.
+
+If you installed manually, the same cleanup is available on its own:
+
+```bash
+tokenfishing --uninstall-statusline
+pipx uninstall token-fishing        # or: pip uninstall token-fishing
+```
+
+### Using it on more than one machine
+
+Run the installer on each machine — the transcripts it reads are local, so there is
+nothing to sync. See [Accuracy](#accuracy-where-the-numbers-come-from) for what does and
+does not match across machines.
 
 ---
 
@@ -252,6 +316,22 @@ recommended setup: **numbers taken through the Claude Code CLI hook are exact.**
   can be off. Pin it with `TOKENFISHING_RESET_AT` when that matters.
 - Estimated values are never presented as certain. They are prefixed with `~` and drawn
   in a different colour.
+
+### Across several machines
+
+Transcripts are written by the Claude Code CLI on the machine that ran it, and nothing
+syncs them. So if you use the same account on a laptop and a desktop, each window shows a
+different slice — but not of everything:
+
+| Value | Same on every machine? |
+|---|---|
+| Usage percentage, time until reset, weekly percentage | **Yes** — reported per account |
+| Token count, request count, burn rate, weekly tokens | **No** — only what that machine did |
+| Theme, pet and mode selection | **No** — the config file is local too |
+
+There is no combined view. Install the statusline hook on **every** machine: without it a
+machine falls back to estimating the limit from its own partial token count, which comes
+out too low.
 
 ### Does it work outside Korea?
 

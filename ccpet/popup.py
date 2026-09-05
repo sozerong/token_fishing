@@ -408,6 +408,8 @@ USAGE = f"""token fishing {__version__} - Claude 사용량 도트 팝업
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
       --install-statusline
                           Claude Code 상태줄 훅을 등록한다 (정확한 리셋 시각)
+      --uninstall-statusline
+                          등록한 상태줄 훅과 남은 설정 파일을 지운다
   -V, --version           버전을 출력한다
   -h, --help              이 도움말
 """
@@ -422,7 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     unknown = [a for a in argv if a.startswith("-") and a not in {
-        "-d", "--detach", "--animal", "--debug", "--doctor", "--install-statusline",
+        "-d", "--detach", "--animal", "--debug", "--doctor",
+        "--install-statusline", "--uninstall-statusline",
         "-V", "--version", "-h", "--help",
     }]
     if unknown or {"-h", "--help"} & set(argv):
@@ -451,6 +454,11 @@ def main(argv: list[str] | None = None) -> int:
         from .statusline import install
 
         return install()
+
+    if "--uninstall-statusline" in argv:
+        from .statusline import uninstall
+
+        return uninstall()
 
     if "-d" in argv or "--detach" in argv:
         return _detach(argv)

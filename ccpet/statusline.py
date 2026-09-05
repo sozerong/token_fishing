@@ -137,12 +137,48 @@ def install() -> int:
     return 0
 
 
+def uninstall() -> int:
+    """등록했던 상태줄을 걷어낸다.
+
+    이걸 안 하면 패키지를 지운 뒤에도 settings.json에 사라진 파일을 가리키는
+    명령이 남는다. 훅은 조용히 실패하도록 만들어져 있어서(main 참고) 사용자는
+    상태줄이 왜 빈칸인지 알 수가 없다. 우리가 넣은 것만 지우고 나머지는 둔다.
+    """
+    if not SETTINGS_PATH.exists():
+        print(f"{SETTINGS_PATH} 가 없다. 지울 것도 없다.")
+        return 0
+    try:
+        settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        print(f"{SETTINGS_PATH} 를 읽을 수 없다. 직접 고쳐라.")
+        return 1
+
+    existing = (settings.get("statusLine") or {}).get("command", "")
+    if Path(__file__).name not in existing:
+        print("이 도구가 등록한 상태줄이 아니다. 건드리지 않는다.")
+        return 0
+
+    settings.pop("statusLine", None)
+    SETTINGS_PATH.write_text(
+        json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"상태줄 해제 완료: {SETTINGS_PATH}")
+
+    for leftover in (STATE_PATH, Path.home() / ".claude" / "tokenfishing-config.json"):
+        if leftover.exists():
+            leftover.unlink()
+            print(f"삭제: {leftover}")
+    return 0
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     if "--install" in sys.argv:
         return install()
+    if "--uninstall" in sys.argv:
+        return uninstall()
 
     try:
         session = json.load(sys.stdin)
