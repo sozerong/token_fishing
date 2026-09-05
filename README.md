@@ -314,6 +314,13 @@ figure that looks out of date is visibly out of date rather than quietly wrong.
 Run `tokenfishing --install-statusline` once to register the hook. This is the
 recommended setup: **numbers taken through the Claude Code CLI hook are exact.**
 
+Claude Code has only one statusline slot. If something else already owns it — a plugin,
+your own script — the installer does not take it: it **chains**, so your existing
+statusline keeps drawing exactly what it drew before while this tool reads the official
+numbers off the same input. Uninstalling puts the original command back. If the original
+ever disappears (plugin paths are per-session), the chain falls back to printing this
+tool's own line rather than an empty statusline.
+
 ### Known sources of drift
 
 - **Usage from the Claude desktop app, claude.ai on the web, or mobile counts against the
@@ -385,6 +392,12 @@ variable:
 Neither source was found. Register the hook with `tokenfishing --install-statusline`, or
 open the Claude desktop app once so it writes its usage history. Then run
 `tokenfishing --doctor` to see exactly which files were found.
+
+**The title says `official·app` and the reset time is marked `~`.**
+Working as intended: the desktop app records percentages but not window boundaries, so the
+reset time has to be estimated from that machine's own transcripts. The percentages are
+account-wide and will agree with your other machines; the reset time will not. Install the
+statusline hook on that machine to make it exact.
 
 **Nothing appears / the window opens empty.**
 There is no active 5-hour window — nothing has been sent recently. The window will say so.
