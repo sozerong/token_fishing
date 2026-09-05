@@ -37,9 +37,12 @@ def record(theme: themes.Theme) -> list[tuple]:
             theme.sky_decor(px, theme, daylight, frame)
             theme.edge(px, theme, daylight, frame)
     top, _ = theme.unit_band
-    for direction in (1, -1):
-        theme.sprite(px, W / 2, top + 6, theme.unit_colors[0], direction)
-    theme.base(px, 16, SEA - 8)
+    for frame in (0, 37, 120):
+        for direction in (1, -1):
+            theme.sprite(px, W / 2, top + 6, theme.unit_colors[0], direction, frame)
+        theme.base(px, 16, SEA - 8, frame)
+        theme.ambient(px, theme, 0.7, frame)
+        theme.pile(px, theme, 40, SEA, 12, frame)
     return dots
 
 
@@ -123,14 +126,18 @@ def test_nothing_is_drawn_outside_the_canvas():
 
 
 def test_units_live_where_the_theme_says():
-    """우주는 하늘에, 나머지는 지면에. 구간이 뒤집히면 화면이 말이 안 된다."""
+    """우주는 화면 전체가 하늘(은하), 나머지는 지면에. 구간이 뒤집히면 화면이 말이 안 된다."""
     for key, theme in themes.THEMES.items():
         top, bottom = theme.unit_band
         assert 0 <= top < bottom <= H, key
-    assert themes.SPACE.unit_band[1] < SEA, "별은 지평선 위에 떠야 한다"
+    # 우주는 지표면이 없다 — 별이 화면 전체(구 지평선 위아래 모두)에 떠야 한다.
+    assert themes.SPACE.unit_band == (6, H - 8), "은하는 화면 전체가 하늘이다"
     for key in ("fishing", "village", "ranch", "garden", "mine", "city"):
         assert themes.THEMES[key].unit_band[0] >= SEA, f"{key}: 지면 아래여야 한다"
     assert not themes.GARDEN.unit_drifts, "심긴 꽃은 돌아다니지 않는다"
+    assert not themes.MINE.unit_drifts, "벽에 박힌 광석은 돌아다니지 않는다"
+    assert not themes.MINE.unit_bobs, "벽에 박힌 광석은 위아래로도 흔들리지 않는다"
+    assert not themes.CITY.unit_bobs, "차는 차선을 지킨다 — 위아래로 흔들리지 않는다"
 
 
 def test_pile_and_units_add_up_in_depletion_mode():
@@ -143,6 +150,54 @@ def test_pile_and_units_add_up_in_depletion_mode():
             state = to_game_state(snap(pct=pct), mode="depletion", theme=key)
             assert state.fish_uncapped + state.on_boat == MAX_FISH_DRAWN, (key, pct)
             assert 0 <= state.on_boat <= MAX_FISH_DRAWN, (key, pct)
+
+
+def test_every_fishing_spot_draws_on_canvas():
+    """배경 7종 전부 자기 몫을 그리고 화면(가로 여유 포함) 안에 있어야 한다."""
+    SLACK = 20
+    assert len(themes.FISHING_SPOTS) == 7, themes.FISHING_SPOT_KEYS
+    for key, spot in themes.FISHING_SPOTS.items():
+        assert spot.key == key
+        assert len(spot.unit_colors) >= 4, key
+        dots: list[tuple] = []
+
+        def px(x, y, w, h, color):
+            dots.append((x, y, w, h, color))
+
+        for frame in (0, 37, 120):
+            spot.base(px, 16, SEA - 6, frame)
+        assert dots, f"{key}: 아무것도 안 그린다"
+        for x, y, w, h, _ in dots:
+            assert -SLACK <= x and x + w <= W + SLACK, f"{key}: 가로가 크게 벗어난다"
+            assert 0 <= y and y + h <= H, f"{key}: 세로가 화면을 벗어난다 ({y}..{y + h})"
+
+
+def test_fishing_spot_changes_scenery_but_not_numbers():
+    """배경을 바꿔도 등급·집계는 낚시 테마 그대로다 — 물고기 색과 고정물만 바뀐다."""
+    plain = themes.FISHING
+    for key in themes.FISHING_SPOT_KEYS:
+        dressed = themes.apply_spot(plain, key)
+        assert dressed.fill_tiers == plain.fill_tiers, key
+        assert dressed.catch_tiers == plain.catch_tiers, key
+        assert dressed.activity_tiers == plain.activity_tiers, key
+        assert dressed.key == plain.key == "fishing"
+
+    # 낚시가 아닌 테마에는 배경을 입혀도 아무 효과가 없다
+    assert themes.apply_spot(themes.CITY, "island") is themes.CITY
+
+
+def test_lakeside_spots_keep_swimming_units_off_dry_land():
+    """차박·캠핑은 바닥 절반이 땅이다 — 헤엄치는 범위도 물 쪽으로 좁혀야
+    물고기가 잔디 위를 헤엄치지 않는다."""
+    for key in ("car", "camp"):
+        dressed = themes.apply_spot(themes.FISHING, key)
+        lo, hi = dressed.unit_x_range
+        assert lo >= 60, f"{key}: 헤엄치는 범위가 땅까지 넘어온다"
+        assert hi <= W
+
+    for key in ("sea", "pier", "rocks", "breakwater", "island"):
+        dressed = themes.apply_spot(themes.FISHING, key)
+        assert dressed.unit_x_range == themes.FISHING.unit_x_range, f"{key}: 안 바뀌어야 한다"
 
 
 def main() -> int:

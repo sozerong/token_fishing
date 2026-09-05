@@ -143,6 +143,9 @@ def to_game_state(
         uncapped = round(MAX_FISH_DRAWN * (1.0 - fill))
         on_boat = MAX_FISH_DRAWN - uncapped
     else:
+        # 축적 모드: 화면에 다 못 그리는 만큼(24마리 초과분)은 그냥 숫자로만
+        # 남는다(fish_uncapped). 더미는 "사라진 만큼 쌓인다"는 고갈 모드의
+        # 은유라 축적 모드에 가져오면 뜻이 안 맞는다 — 아무것도 안 쌓는다.
         uncapped = catch // FISH_PER_TOKEN
 
     left = snap.time_to_reset  # 창이 없으면 None

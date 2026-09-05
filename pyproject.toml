@@ -1,7 +1,7 @@
 [project]
 name = "token-fishing"
 dynamic = ["version"]
-description = "Claude Code 사용량을 낚시 도트 화면으로 보여주는 항상-위 팝업"
+description = "An always-on-top pixel-art window showing your Claude Code usage"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

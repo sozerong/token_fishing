@@ -35,22 +35,6 @@ ACTIVITY_SPEED = (0.10, 0.22, 0.45, 0.85)
 """활동 등급(4단계) → 움직이는 속도. 등급 이름은 테마마다 다르므로 순번으로 찾는다."""
 
 
-def _pile_slots(rows=(7, 6, 5, 4, 2)) -> list[tuple[int, int]]:
-    """갑판에 쌓이는 자리. 아래가 넓고 위로 갈수록 좁아진다.
-
-    합이 MAX_FISH_DRAWN(24)이라 100%일 때 화면이 비고 더미가 꽉 찬다.
-    """
-    slots = []
-    for row, count in enumerate(rows):
-        indent = row  # 위 줄일수록 안쪽으로
-        for col in range(count):
-            slots.append((indent * 2 + col * 4, row * 2))
-    return slots
-
-
-_PILE_SLOTS = _pile_slots()
-
-
 def _mix(a, b, t: float) -> str:
     return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
@@ -62,6 +46,7 @@ class Popup:
         self.settings = config.load()
         self.frame = 0
         self.fish: list[dict] = []
+        self._reroll_layout()
         self._sync_fish()
 
         # 어느 복사본이 도는지 제목으로 바로 보인다. 낡은 프로세스를 붙들고
@@ -102,6 +87,7 @@ class Popup:
             return b
 
         self.theme_btn = button(self._next_theme)
+        self.spot_btn = button(self._next_spot)      # 낚시일 때만 보인다
         self.mode_btn = button(self._toggle_mode)
         self._apply_buttons()
 
@@ -131,17 +117,41 @@ class Popup:
     # ---- 토글 ----
 
     def _apply_buttons(self) -> None:
-        self.theme_btn.configure(text=self.theme.name)
+        base = themes.get(self.settings.get("theme"))
+        self.theme_btn.configure(text=base.name)
         self.mode_btn.configure(text=config.MODE_LABELS[self.settings["mode"]])
+        if base.key == "fishing":
+            spot = themes.get_spot(self.settings.get("fishing_spot"))
+            self.spot_btn.configure(text=spot.name)
+            self.spot_btn.pack(side="left", fill="x", expand=True, padx=(0, 2), before=self.mode_btn)
+        else:
+            # 낚시가 아니면 배경 고를 게 없다 — 눌러도 아무 효과 없는 버튼을
+            # 남겨두지 않는다.
+            self.spot_btn.pack_forget()
 
     @property
     def theme(self) -> themes.Theme:
-        return themes.get(self.settings.get("theme"))
+        base = themes.get(self.settings.get("theme"))
+        return themes.apply_spot(base, self.settings.get("fishing_spot"))
+
+    def _reroll_layout(self) -> None:
+        """고정물 x를 새로 뽑는다. 배경이 바뀔 때만 부른다 — 매 프레임 부르면
+        고정물이 아니라 흔들리는 것이 된다. 범위는 테마가 정한다 (차박·캠핑은
+        땅이 왼쪽뿐이라 좁다)."""
+        self.base_x = random.uniform(*self.theme.base_x_range)
 
     def _next_theme(self) -> None:
         self.settings["theme"] = config.next_in(
             themes.THEME_KEYS, self.settings.get("theme", themes.DEFAULT)
         )
+        self._reroll_layout()
+        self._commit_settings()
+
+    def _next_spot(self) -> None:
+        self.settings["fishing_spot"] = config.next_in(
+            themes.FISHING_SPOT_KEYS, self.settings.get("fishing_spot", themes.DEFAULT_SPOT)
+        )
+        self._reroll_layout()
         self._commit_settings()
 
     def _toggle_mode(self) -> None:
@@ -193,13 +203,37 @@ class Popup:
         index = names.index(self.state.bite) if self.state.bite in names else 1
         return ACTIVITY_SPEED[index]
 
-    def _new_fish(self) -> dict:
+    def _unit_band(self) -> tuple[float, float]:
+        """돌아다니는 것들이 실제로 쓸 수 있는 y 구간.
+
+        더미가 화면에 있는 동안에는 그 구간(울타리·화단 안쪽)을 비켜 준다 —
+        안팎이 확실해야 동물이 울타리를 통과하는 것처럼 안 보인다."""
         look = self.theme
         top, bottom = look.unit_band
+        if look.pile_band and self.state.on_boat > 0:
+            bottom = max(top + 4, min(bottom, look.pile_band[0] - 6))
+        return top, bottom
+
+    def _new_fish(self) -> dict:
+        look = self.theme
+        top, bottom = self._unit_band()
+        if look.unit_lanes:
+            # 차선. 구간을 N등분해 그 위에서만 다니게 한다 — 아무 y나 고르면
+            # 차들이 도로를 벗어나 대각선으로 떠다니는 것처럼 보인다.
+            lane = random.randrange(look.unit_lanes)
+            y = top + (bottom - top) * (lane + 0.5) / look.unit_lanes
+            # 방향도 차선이 정한다 — 중앙선을 기준으로 왼쪽/오른쪽이 각자 한
+            # 방향으로만 다녀야 도로처럼 보인다. 무작위면 서로 마주 보고 가다
+            # 서다 하는 것처럼 어색해 보였다.
+            direction = 1 if lane % 2 == 0 else -1
+        else:
+            y = random.uniform(top, bottom)
+            direction = random.choice((-1, 1))
+        x_lo, x_hi = look.unit_x_range
         return {
-            "x": random.uniform(4, W - 12),
-            "y": random.uniform(top, bottom),
-            "dir": random.choice((-1, 1)),
+            "x": random.uniform(x_lo, x_hi),
+            "y": y,
+            "dir": direction,
             # 심겨 있는 테마(정원)는 가로로 움직이지 않는다. 흔들림만 남는다.
             "s": self._speed() * random.uniform(0.6, 1.4) if look.unit_drifts else 0.0,
             "c": random.choice(look.unit_colors),
@@ -271,25 +305,47 @@ class Popup:
         self._px(0, SEA, W, H - SEA, _mix(*look.ground, d))
         look.edge(self._px, look, d, t)
 
-        # 돌아다니는 것들
+        # 돌아다니는 것들. 구간이 좁아졌으면(고갈 모드에서 울타리가 생겼으면)
+        # 이미 자리 잡은 것들도 밖으로 밀어낸다.
+        band_top, band_bottom = self._unit_band()
         for f in self.fish:
+            f["y"] = min(max(f["y"], band_top), band_bottom)
             f["x"] += f["dir"] * f["s"]
-            if f["x"] < 2:
-                f["x"], f["dir"] = 2, 1
-            if f["x"] > W - 10:
-                f["x"], f["dir"] = W - 10, -1
-            y = f["y"] + math.sin(t * 0.25 + f["phase"]) * 1.2
-            look.sprite(self._px, f["x"], y, f["c"], f["dir"])
+            if look.unit_lanes:
+                # 차선은 방향이 고정이라 튕기면 안 된다 — 반대편에서 다시 들어온다.
+                if f["x"] < -8:
+                    f["x"] = W + 6
+                elif f["x"] > W + 8:
+                    f["x"] = -6
+            else:
+                x_lo, x_hi = look.unit_x_range
+                if f["x"] < x_lo:
+                    f["x"], f["dir"] = x_lo, 1
+                if f["x"] > x_hi:
+                    f["x"], f["dir"] = x_hi, -1
+            # 차선을 지키는 차, 벽에 박힌 광석은 위아래로도 흔들면 안 된다.
+            y = f["y"] + (math.sin(t * 0.25 + f["phase"]) * 1.2 if look.unit_bobs else 0)
+            look.sprite(self._px, f["x"], y, f["c"], f["dir"], t)
+
+        # 마리 수와 무관한 배경 연출 (광차, 나비 ...). 대부분의 테마는 아무것도 안 그린다.
+        look.ambient(self._px, look, d, t)
 
         # 고정물. 살짝 흔들려야 정지 화면으로 안 보인다.
-        bob = math.sin(t * 0.2) * 1.2
-        bx, by = 16, SEA - 8 + bob
-        look.base(self._px, bx, by)
+        # x는 테마가 바뀔 때마다 새로 뽑는다(self.base_x) — 매번 같은 자리에
+        # 박혀 있으면 배경이 바뀌어도 화면 구도가 똑같아 보인다. ground_sink는
+        # 땅에 서는 고정물(집·헛간·타워 ...)을 경계선보다 살짝 더 내려 앉힌다 —
+        # 안 그러면 경계선에 걸쳐 떠 보인다. 물 위에 뜨는 배·로켓은 0이라 그대로.
+        # 흔들리는 건 물 위에 뜬 것(배)뿐이다. 땅에 선 집·타워·차·텐트가
+        # 흔들리면 위로 떴을 때 밑동이 지평선 위로 올라가 공중에 뜬 것처럼 보인다.
+        bob = math.sin(t * 0.2) * 1.2 if look.base_bobs else 0
+        bx, by = self.base_x, SEA - 6 + look.ground_sink + bob
+        look.base(self._px, bx, by, t)
 
-        # 모아 둔 더미. 고갈 모드에서 화면에서 사라진 만큼 여기로 온다.
-        # 아래 줄부터 채우고 위로 갈수록 좁아진다 — 쌓인 더미처럼 보이게.
-        for i, (dx, dy) in enumerate(_PILE_SLOTS[: s.on_boat]):
-            self._px(bx + 30 + dx, by + 9 - dy, 3, 2, look.unit_colors[i % 4])
+        # 모아 둔 것. 고갈 모드에서 화면에서 사라진 만큼이 여기로 온다(축적
+        # 모드는 state.py가 애초에 0으로 둔다). 테마마다 모으는 방식이 다르다
+        # (쌓기/줄서기/울타리/불꽃/건물 창/카트/그물/호수) — 오프셋은 각
+        # pile 함수가 고정물 폭에 맞춰 알아서 잡으므로 여기선 기준점만 넘긴다.
+        look.pile(self._px, look, bx, by + 4, s.on_boat, t)
 
         if not s.is_fishing:
             self.canvas.create_rectangle(
@@ -347,6 +403,7 @@ USAGE = f"""token fishing {__version__} - Claude 사용량 도트 팝업
 
 옵션
   -d, --detach            백그라운드로 띄우고 셸을 돌려준다
+      --animal            반려동물 화면으로 띄운다 (강아지·고양이·앵무새 ...)
       --debug             진단 로그를 stderr로 출력한다
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
       --install-statusline
@@ -365,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     unknown = [a for a in argv if a.startswith("-") and a not in {
-        "-d", "--detach", "--debug", "--doctor", "--install-statusline",
+        "-d", "--detach", "--animal", "--debug", "--doctor", "--install-statusline",
         "-V", "--version", "-h", "--help",
     }]
     if unknown or {"-h", "--help"} & set(argv):
@@ -399,7 +456,12 @@ def main(argv: list[str] | None = None) -> int:
         return _detach(argv)
 
     root = tk.Tk()
-    Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다
+    if "--animal" in argv:
+        from .petpopup import AnimalPopup
+
+        AnimalPopup(root, build_state())
+    else:
+        Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다
     root.mainloop()
     return 0
 

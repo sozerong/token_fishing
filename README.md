@@ -1,79 +1,145 @@
 # token fishing
 
-Claude Code 사용량을 픽셀 아트 화면으로 보여주는 항상-위 팝업입니다.
+*An always-on-top pixel-art window that shows how much Claude Code you have used.*
 
-지금 얼마나 썼는지, 얼마나 빨리 쓰고 있는지, 언제 리셋되는지를 창 하나로 확인할 수
-있습니다. 설정 화면을 열 필요가 없습니다.
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Dependencies](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen)](pyproject.toml)
 
-| 화면 요소 | 의미 |
+How much have you spent in this 5-hour window, how fast are you burning it, and when
+does it reset? `tokenfishing` answers all three in a small window that stays on top of
+your editor. No dashboard to open, no browser tab to keep around.
+
+| What you see | What it means |
 |---|---|
-| 돌아다니는 것의 수와 등급 | 이번 5시간 창에서 쓴 양 |
-| 움직이는 속도 | 분당 토큰 (burn rate) |
-| 해의 높이 | 리셋까지 남은 시간 — 높으면 대낮, 낮으면 노을 |
+| Number of things moving around | Tokens spent in the current 5-hour window |
+| How fast they move | Burn rate (tokens per minute) |
+| Height of the sun | Time left until the window resets — high at noon, low at dusk |
+| Things gathered near the base | In *depletion* mode, how much of the window is already gone |
 
-등급은 창을 얼마나 채웠는지에 따라 다섯 단계로 올라갑니다. 낚시 테마라면
-**빈 바구니 → 잔챙이 → 반 바구니 → 한 바구니 → 만선** 입니다.
+The tier climbs through five steps as the window fills. In the fishing theme that is
+**empty basket → small fry → half basket → full basket → full boat**.
 
-- 런타임 의존성 없음 — 표준 라이브러리만 사용합니다
-- 네트워크 전송 없음 — 모든 처리가 로컬에서 끝납니다
-- 사용률과 리셋 시각은 Claude가 제공하는 공식 값을 그대로 사용합니다
-
-### 화면 컨셉
-
-창 아래 왼쪽 버튼으로 일곱 가지 컨셉을 순환합니다. 선택은 저장됩니다.
-
-| 컨셉 | 하늘 | 바닥 | 구조물 | 세는 것 | 활동 |
-|---|---|---|---|---|---|
-| 낚시 | 해 | 출렁이는 수면 | 낚싯배 | 물고기 | 입질 · 캐스팅 |
-| 마을 | 해와 구름 | 풀밭 | 집 | 주민 | 북적임 · 방문 |
-| 목장 | 해와 구름 | 풀밭 | 헛간 | 동물 | 울음소리 · 먹이 주기 |
-| 우주 | 별밭과 달 | 행성 표면 | 로켓 | 별 (하늘에 뜬다) | 전파 · 교신 |
-| 정원 | 해와 구름 | 풀밭 | 온실 | 꽃 (심겨 있다) | 개화 · 물주기 |
-| 광산 | 암반 천장과 램프 | 침목과 레일 | 갱구 | 광석 | 곡괭이질 · 채굴 |
-| 도시 | 스카이라인 | 도로와 중앙선 | 빌딩 | 차 | 교통량 · 운행 |
-
-**컨셉은 그림과 이름만 바꿉니다.** 등급이 올라가는 경계값은 모든 컨셉이 동일하므로,
-어떤 컨셉을 골라도 같은 사용량은 같은 등급으로 표시됩니다.
-
-### 표시 모드
-
-오른쪽 버튼으로 전환합니다.
-
-| 모드 | 동작 |
-|---|---|
-| 축적 | 쓸수록 화면이 채워집니다. "오늘 얼마나 썼나" |
-| 고갈 | 가득 찬 화면에서 시작해 쓸수록 비어 갑니다. "얼마나 남았나" |
+- **No runtime dependencies** — standard library only
+- **Nothing leaves your machine** — every byte is read and rendered locally
+- **Official numbers when available** — usage percentage and reset time come straight
+  from what Claude reports, not from a guess
 
 ---
 
-## 요구 사항
+## Table of contents
 
-- Python 3.11 이상
-- tkinter (표준 라이브러리 GUI 모듈)
-- Claude Code 사용 기록 — `~/.claude/projects/`
+- [Themes](#themes)
+- [Fishing spots](#fishing-spots)
+- [Pet mode](#pet-mode)
+- [Display modes](#display-modes)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Accuracy: where the numbers come from](#accuracy-where-the-numbers-come-from)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [What it shows, and what it refuses to show](#what-it-shows-and-what-it-refuses-to-show)
+- [How it works](#how-it-works)
+- [Development](#development)
+- [License](#license)
 
-설치된 환경을 먼저 확인합니다.
+---
+
+## Themes
+
+The left button at the bottom of the window cycles through seven themes. Your choice is
+remembered.
+
+| Theme | Sky | Ground | Landmark | What is counted | When the window drains |
+|---|---|---|---|---|---|
+| Fishing | Sun | Rolling waves | Boat / pier / breakwater … | Fish | Catch fills a landing net |
+| Village | Sun and clouds | Meadow | House | Villagers | New houses go up beside it |
+| Ranch | Sun and clouds | Meadow | Barn | Animals | A round corral fills up |
+| Space | Starfield and moon | *(none — open galaxy)* | Rocket | Stars | The rocket's flame grows |
+| Garden | Sun and clouds | Meadow | Greenhouse | Flowers | A round flower bed fills up |
+| Mine | Rock ceiling and lamp | Sleepers and rails | Mine shaft | Ore | An ore cart fills up |
+| City | Scrolling skyline | Two-lane road | Tower | Cars | More buildings light up |
+
+**A theme only changes pictures and wording.** Every theme shares the same tier
+thresholds, so the same usage always maps to the same tier no matter which one you pick.
+This is enforced by `tests/test_themes.py`.
+
+## Fishing spots
+
+The fishing theme has its own background selector — a third button appears while the
+fishing theme is active. Each spot changes the water colour, the sky, the props, and
+which fish you catch.
+
+| Spot | Setting | Props |
+|---|---|---|
+| Open sea | Deep blue water | Mast and flag, life ring, passing ship, gulls |
+| Pier | Green harbour water | Lamp post, crates, coiled rope, gulls |
+| Rocky shore | Cold, deep water | Seaweed, breaking spray, gulls |
+| Breakwater | Steel-blue water | Red-striped lighthouse, tetrapods, gulls |
+| Island | Tropical turquoise | Palm tree with coconuts, beach ball, shells, gulls |
+| Car camping | Lakeside — land on the left | Open tailgate, camping chair, hanging lantern |
+| Tent camping | Lakeside — land on the left | Tent, campfire with a pot, hanging lantern |
+
+## Pet mode
+
+```bash
+tokenfishing --animal
+```
+
+The same numbers, drawn as a pet in a room. The more you spend, the more food piles up in
+the bowl — and the pet reacts to you:
+
+| You do | The pet does |
+|---|---|
+| Click the pet | Gets petted — hearts pop up |
+| Click the toy | Walks over and plays with it |
+| Click the bowl | Walks over and eats |
+| Click anywhere else | Walks there |
+
+Five species, each with its own idle animation and gait: **dog** (tail wag), **cat**
+(upright tail), **parrot** (hops), **hedgehog** (slow waddle), **hamster** (dash and
+pause). The button at the bottom cycles through them.
+
+## Display modes
+
+The right button switches between the two.
+
+| Mode | Behaviour |
+|---|---|
+| Accumulate | The screen fills up as you spend. *"How much have I used?"* |
+| Depletion | Starts full and empties as you spend. *"How much is left?"* |
+
+---
+
+## Requirements
+
+- Python 3.11 or newer
+- tkinter (the standard-library GUI module)
+- Claude Code history in `~/.claude/projects/`
+
+Check what you have first:
 
 ```bash
 python3 -c "import sys, tkinter; print(sys.version)"
 ```
 
-`ModuleNotFoundError: No module named 'tkinter'` 가 나오면 아래를 설치합니다.
+If that prints `ModuleNotFoundError: No module named 'tkinter'`, install it:
 
-| 환경 | 명령 |
+| Platform | Command |
 |---|---|
-| Debian · Ubuntu | `sudo apt install python3-tk` |
-| Fedora · RHEL | `sudo dnf install python3-tkinter` |
+| Debian / Ubuntu | `sudo apt install python3-tk` |
+| Fedora / RHEL | `sudo dnf install python3-tkinter` |
 | Arch | `sudo pacman -S tk` |
 | macOS (Homebrew Python) | `brew install python-tk` |
-| macOS (python.org 설치본) | 이미 포함되어 있습니다 |
-| Windows | 이미 포함되어 있습니다 |
+| macOS (python.org build) | already included |
+| Windows | already included |
 
 ---
 
-## 설치
+## Installation
 
-### macOS · Linux
+### macOS / Linux
 
 ```bash
 pip3 install git+https://github.com/sozerong/token_fishing.git
@@ -85,195 +151,164 @@ pip3 install git+https://github.com/sozerong/token_fishing.git
 py -3.12 -m pip install git+https://github.com/sozerong/token_fishing.git
 ```
 
-설치하면 `tokenfishing`(팝업)과 `tokenfishing-console`(콘솔 출력) 명령이 생성됩니다.
+This installs two commands: `tokenfishing` (the window) and `tokenfishing-console`
+(plain text output).
 
 <details>
-<summary>다른 설치 방법</summary>
+<summary>Other ways to install</summary>
 
 ```bash
-# 전역 환경을 건드리지 않고 설치
+# Isolated, without touching your global environment
 pipx install git+https://github.com/sozerong/token_fishing.git
 
-# 설치 없이 즉시 실행
+# Run once without installing
 uvx --from git+https://github.com/sozerong/token_fishing.git tokenfishing
 
-# 소스를 수정할 경우
+# From source, for hacking on it
 git clone https://github.com/sozerong/token_fishing.git
 cd token_fishing
 pip3 install -e .
 ```
 
-소스에서 직접 실행할 때는 저장소 루트에서 `python3 -m ccpet` 를 사용합니다.
+When running from a source checkout, use `python3 -m ccpet` from the repository root.
 </details>
 
 ---
 
-## 사용
+## Usage
 
 ```bash
 tokenfishing
 ```
 
-항상 위에 표시되는 창이 열리고 10초마다 갱신됩니다. 창을 닫으면 종료됩니다.
+An always-on-top window opens and refreshes every 10 seconds. Close the window to quit.
 
-### 명령행 옵션
+### Command-line options
 
 ```
-tokenfishing [옵션]
+tokenfishing [options]
 
-  -d, --detach            백그라운드로 실행하고 셸을 즉시 반환합니다
-      --debug             진단 로그를 stderr로 출력합니다
-      --doctor            사용량 데이터 소스를 진단하고 종료합니다
+  -d, --detach            run in the background and return the shell immediately
+      --animal            open the pet screen instead of the landscape themes
+      --debug             print diagnostics to stderr
+      --doctor            diagnose the usage data sources and exit
       --install-statusline
-                          Claude Code 상태줄 훅을 등록합니다
-  -V, --version           버전을 출력합니다
-  -h, --help              도움말을 출력합니다
+                          register the Claude Code statusline hook
+  -V, --version           print the version
+  -h, --help              print this help
 ```
 
-터미널을 계속 쓰려면 `-d` 로 띄웁니다. Windows에서는 `pythonw` 로 실행되어 콘솔
-창이 함께 뜨지 않고, macOS·Linux에서는 새 세션으로 분리되어 터미널을 닫아도
-살아 있습니다.
+Use `-d` to keep your terminal free. On Windows it re-launches through `pythonw` so no
+console window tags along; on macOS and Linux it detaches into a new session and survives
+closing the terminal.
 
 ```bash
 tokenfishing -d
-# 백그라운드 실행 중 (PID 18556)
+# running in background (PID 18556)
 ```
 
-종료할 때는 창을 닫거나 프로세스를 종료합니다.
+To stop it, close the window or kill the process:
 
 ```bash
-pkill -f "ccpet"                       # macOS · Linux
+pkill -f "ccpet"                       # macOS / Linux
 taskkill /F /IM pythonw.exe            # Windows
 ```
 
-### 콘솔 출력
+### Console output
 
-숫자만 필요하면 콘솔 명령을 사용합니다.
+For a terminal-only summary:
 
 ```bash
 tokenfishing-console
 ```
 
-```
-현재 윈도우  2026-09-04 15:11 ~ 20:11 UTC, 요청 152개
-  input                304
-  output           143,128
-  cache_w          406,903
-  cache_r       33,867,920
-리셋까지     2시간 30분
-burn rate    89,206 토큰/분 (최근 1시간)
+---
 
-주간         09-01 00:00 부터, 요청 564개
-  조업량           612,526
-  전체         111,679,086
+## Accuracy: where the numbers come from
 
-모델별 (조업량 기준)
-  claude-opus-5                    911,680   63.9%  요청 1020
-  claude-sonnet-5                  489,631   34.3%  요청 524
-```
+Everything is derived from the JSONL transcripts Claude Code writes under
+`~/.claude/projects/`. Parsing them correctly is the whole point of this project, and the
+parser is verified item-by-item (input / output / cache-write / cache-read) against
+[claude-monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor) as a
+cross-check, not as a dependency.
 
-브라우저용 HTML은 `python3 -m ccpet.render` 로 생성할 수 있습니다. HTML 화면은
-낚시 컨셉만 지원합니다.
+The **usage percentage and reset time** can come from three places, and the window title
+always tells you which one is in play:
+
+| Source | Title shows | How exact |
+|---|---|---|
+| Statusline hook | `official·hook` | **Exact.** Claude Code reports `rate_limits` directly |
+| Desktop app history | `official·app` | Exact as of the app's last write; can lag behind |
+| Neither | `estimate (no official numbers)` | Estimated from a learned limit — may drift |
+
+Run `tokenfishing --install-statusline` once to register the hook. This is the
+recommended setup: **numbers taken through the Claude Code CLI hook are exact.**
+
+### Known sources of drift
+
+- **Usage from the Claude desktop app, claude.ai on the web, or mobile counts against the
+  same 5-hour limit but leaves no trace in the local JSONL.** If a session was opened by
+  usage this tool cannot see, the estimated window start — and therefore the reset time —
+  can be off. Pin it with `TOKENFISHING_RESET_AT` when that matters.
+- Estimated values are never presented as certain. They are prefixed with `~` and drawn
+  in a different colour.
+
+### Does it work outside Korea?
+
+Yes. Concretely:
+
+- **Time zones.** The 5-hour window is computed entirely in UTC from UTC timestamps, so it
+  is correct in any time zone. The weekly figure uses your *local* midnight.
+- **Locales and encodings.** Transcripts are read as UTF-8 with replacement, and console
+  output is forced to UTF-8, so a non-UTF-8 terminal code page will not crash it.
+- **Paths.** `~/.claude` on macOS, Linux and Windows, plus `CLAUDE_CONFIG_DIR`, plus the
+  MSIX-redirected location the Windows Store build of the Claude desktop app writes to.
+- **Weekly reset day.** Defaults to Tuesday, which is what one observed account used. This
+  varies per account rather than per country — set `TOKENFISHING_WEEKLY_RESET_DAY` if your
+  official screen says a different day.
+
+> **Note:** the on-screen labels are currently in Korean. The data, the maths and the
+> command-line interface are language-independent; only the wording on the canvas is not
+> translated yet.
 
 ---
 
-## 사용률은 어디서 오나
+## Configuration
 
-사용률은 두 곳에서 읽으며, **항목마다 더 정확한 쪽을 선택**합니다.
+Two settings are toggled in the window itself (theme, fishing spot, pet, display mode) and
+stored in `~/.claude/tokenfishing-config.json`. Everything else is an environment
+variable:
 
-| 소스 | 갱신 주기 | 장점 | 필요 조건 |
-|---|---|---|---|
-| Claude 데스크톱 앱 기록 | 5–15분 | 설정 불필요. 웹·모바일 사용량까지 포함 | 데스크톱 앱 (Windows · macOS) |
-| Claude Code 상태줄 훅 | 대화 턴마다 | 정확한 리셋 시각. 실시간 | 훅 등록 + Pro/Max |
-
-데스크톱 앱 기록의 위치는 다음과 같습니다.
-
-| 플랫폼 | 경로 |
+| Variable | Effect |
 |---|---|
-| Windows | `%APPDATA%\Claude\plan-usage-history.json` |
-| macOS | `~/Library/Application Support/Claude/plan-usage-history.json` |
-| Linux | `~/.config/Claude/plan-usage-history.json` |
-
-> **Windows 참고**
-> Claude 데스크톱 앱이 MSIX(스토어) 패키지로 설치된 경우 위 경로에 대한 쓰기가
-> `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\` 로 리디렉션됩니다.
-> token fishing은 두 경로를 모두 확인하므로 별도 설정이 필요하지 않습니다.
-
-> **Linux 참고**
-> Claude 데스크톱 앱은 Linux를 지원하지 않습니다. Linux에서는 상태줄 훅을
-> 등록해야 공식 사용률을 받을 수 있습니다.
-
-### 창 제목으로 출처 확인
-
-창 제목에 버전과 데이터 출처가 함께 표시됩니다.
-
-| 제목 | 의미 |
-|---|---|
-| `token fishing 0.7.1 · 공식·훅` | 상태줄 훅에서 받은 실시간 공식 값 |
-| `token fishing 0.7.1 · 공식·앱` | 데스크톱 앱 기록의 공식 값 (최대 15분 지연) |
-| `token fishing 0.7.1 · 어림(공식수치 없음)` | 공식 값을 받지 못해 자체 추정치로 표시 중 |
-
-리셋까지 남은 시간 앞의 `~` 는 계산으로 추정한 값이라는 표시입니다. 상태줄 훅이
-동작하면 사라집니다.
-
-### 상태줄 훅 등록
-
-정확한 리셋 시각이 필요하거나 Linux를 사용한다면 훅을 등록합니다.
-
-```bash
-tokenfishing --install-statusline
-```
-
-`~/.claude/settings.json` 이 백업된 뒤 `statusLine` 항목만 추가됩니다. 등록 후
-Claude Code를 다시 시작하면 적용되며, 상태줄에도 사용률 한 줄이 표시됩니다.
-
-`rate_limits` 는 Pro/Max 구독에서, 세션의 첫 API 응답 이후에 전달됩니다. 훅이
-실행되었는데도 진단에 `five_hour=(비어 있음)` 으로 나온다면 해당 클라이언트가
-`rate_limits` 를 전달하지 않는 경우이며, 이때는 데스크톱 앱 기록이 사용됩니다.
-
-리셋 시각을 직접 지정할 수도 있습니다. Claude 설정 → 사용량의 "N시간 M분 후
-재설정"을 시계 시각으로 환산해 넣습니다.
-
-```bash
-export TOKENFISHING_RESET_AT=05:17
-```
+| `TOKENFISHING_RESET_AT` | Pin the 5-hour reset time (e.g. `20:17`, or an ISO timestamp) when the estimate is off |
+| `TOKENFISHING_WEEKLY_RESET_DAY` | Weekly reset weekday, `0` = Monday … `6` = Sunday. Default `1` (Tuesday) |
+| `CLAUDE_CONFIG_DIR` | Look for Claude Code data somewhere other than `~/.claude` |
 
 ---
 
-## 문제 해결
+## Troubleshooting
 
-제목에 `어림(공식수치 없음)` 이 표시되면 진단을 실행합니다.
+**The title says `estimate (no official numbers)`.**
+Neither source was found. Register the hook with `tokenfishing --install-statusline`, or
+open the Claude desktop app once so it writes its usage history. Then run
+`tokenfishing --doctor` to see exactly which files were found.
+
+**Nothing appears / the window opens empty.**
+There is no active 5-hour window — nothing has been sent recently. The window will say so.
+
+**The reset time looks wrong.**
+Most likely you used Claude somewhere this tool cannot see (web, mobile, desktop app).
+Read the reset time off the official usage screen and pin it:
 
 ```bash
-tokenfishing --doctor
+TOKENFISHING_RESET_AT=20:17 tokenfishing
 ```
 
-```
-python      /usr/bin/python3
-APPDATA     (none)
-앱 기록     ~/Library/Application Support/Claude/plan-usage-history.json
-  읽기      OK (135,423 바이트)
-  version   2
-  samples   1514개 (원본)
-  파싱      1514개
-  최신      12:20:27  fh=75 sd=33
-  clean_pct fh→75.0  sd→33.0
-  latest()  OK
-상태줄 훅   ~/.claude/tokenfishing-limits.json
-  캡처      2026-09-05T03:22:22+00:00  five_hour=(비어 있음)
+**The weekly total looks wrong.**
+Your account resets on a different weekday. Set `TOKENFISHING_WEEKLY_RESET_DAY`.
 
-판정        사용률 출처=app  값=75.0  주간=33.0
-            리셋=16:32 추정
-```
-
-| 진단 결과 | 조치 |
-|---|---|
-| `후보가 전부 비었다` | 데스크톱 앱을 실행한 상태로 15분 정도 기다립니다 |
-| `읽기 실패` | 파일 권한을 확인합니다 |
-| `캡처 없음` + 앱 기록도 없음 | `--install-statusline` 후 Claude Code를 재시작합니다 |
-| `five_hour=(비어 있음)` | 해당 세션이 `rate_limits` 를 전달하지 않습니다. 앱 기록이 사용됩니다 |
-
-동작 중인 값의 출처를 추적하려면 `--debug` 를 사용합니다.
+**Diagnostics.**
 
 ```bash
 tokenfishing --debug
@@ -282,89 +317,87 @@ tokenfishing --debug
 
 ---
 
-## 설정
+## What it shows, and what it refuses to show
 
-| 환경변수 | 기본값 | 설명 |
-|---|---|---|
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude 설정 폴더 |
-| `TOKENFISHING_RESET_AT` | (없음) | 5시간 리셋 시각 직접 지정 |
-| `TOKENFISHING_WEEKLY_RESET_DAY` | `1` (화) | 주간 리셋 요일 — 월=0 … 일=6 |
+Included, because it is plain aggregation:
 
-화면 컨셉과 표시 모드는 `~/.claude/tokenfishing-config.json` 에 저장됩니다.
+- Tokens used in the current 5-hour window, request count, burn rate
+- Per-model breakdown, weekly total, all-time total
+- The official usage percentage and reset time, when they are available
 
----
+Deliberately **not** included, because it would require guessing:
 
-## 표시하는 값과 표시하지 않는 값
-
-표시하는 값입니다.
-
-- 현재 5시간 창의 input · output · 캐시 쓰기 · 캐시 읽기 토큰과 요청 수
-- 사용률과 리셋까지 남은 시간
-- burn rate (최근 1시간 기준 분당 토큰)
-- 주간 사용량, 모델별 분포, 전체 누적
-
-표시하지 않는 값입니다.
-
-- **한도 대비 퍼센트를 추정한 값** — 공식 사용률을 받지 못하면 추정치임을 명시합니다
-- **소진 예측** — 추정된 한도 위에 쌓인 값이라 신뢰할 수 없습니다
-- **비용 환산** — 구독 사용자는 토큰당 과금되지 않으므로 실제 지출이 아닙니다
-
-공식 값을 뒤처짐만큼 보정해 앞당기는 기능도 두지 않습니다. 실측 검증에서 중앙값은
-1.3%p 개선되었지만 최악의 경우 68%p를 과대 표시했고, 오차가 항상 100% 방향으로
-치우쳤습니다. 15분 지연된 정확한 값이 앞당겨진 부정확한 값보다 낫다고 판단했습니다.
+- **Percent-of-limit derived from an estimated limit.** A P90-estimated limit was measured
+  at 82.6% against an official screen showing 35% — off by more than double.
+- **Pace and forecast**, which are built on that estimate.
+- **Dollar cost.** It would mean hard-coding a price table that silently goes stale, and
+  subscription users do not pay per token in the first place.
 
 ---
 
-## 동작 방식
-
-Claude Code가 세션마다 남기는 로그를 읽습니다. **읽기만 하며 아무것도 수정하지
-않습니다.**
+## How it works
 
 ```
-~/.claude/projects/<프로젝트>/<세션>.jsonl                 메인 세션
-~/.claude/projects/<프로젝트>/<세션>/subagents/*.jsonl     서브에이전트
+~/.claude/projects/**/*.jsonl
+        │  streamed line by line, never read whole
+        ▼
+    [ parser ]      normalises one usage record per request
+        │           · de-duplicates by requestId (one turn spans several lines)
+        │           · takes max(output_tokens) per request (sub-agent files grow)
+        │           · includes subagents/agent-*.jsonl (separate files, no double count)
+        ▼
+   UsageEntry
+        │
+        ▼
+   [ aggregate ]    5-hour rolling window, burn rate, weekly totals
+        │
+        ▼
+    GameState  ──►  [ themes ]  ──►  pixels
 ```
 
-로그에는 대화 내용이 포함되어 있지만 이 도구는 토큰 수와 모델 이름만 사용합니다.
-프롬프트와 응답 본문은 읽지도, 기록하지도, 외부로 전송하지도 않습니다.
+The parser is deliberately a thin layer: nothing above it knows what a JSONL line looks
+like, and the drawing layer never invents a number — it only translates what `aggregate`
+produced into a metaphor.
+
+The transcript format is an undocumented internal detail with no version field, so the
+parser ignores unknown fields rather than rejecting records, and keeps a counter of
+never-before-seen keys as an early warning that the format changed.
 
 ---
 
-## 개발
+## Development
 
 ```bash
 git clone https://github.com/sozerong/token_fishing.git
 cd token_fishing
-pip3 install -e .
+python3 -m pytest tests -q
 ```
 
-테스트는 pytest로도, 단독으로도 실행됩니다.
+Self-checks for the drawing layers run standalone:
 
 ```bash
-pytest tests -q
-
-python3 tests/test_parser.py
-python3 tests/test_aggregate.py
-python3 tests/test_plan_usage.py
-python3 tests/test_state.py
-python3 tests/test_themes.py
+python3 -m ccpet.themes     # 7 themes, 7 fishing spots
+python3 -m ccpet.animal     # 5 pets
 ```
 
-테스트 데이터는 전부 손으로 작성한 합성 로그입니다. 실제 세션 파일은 대화 내용을
-포함하므로 저장소에 커밋하지 않습니다.
-
-집계 정확도는 참조 구현(claude-monitor)과 항목별로 대조해 검증합니다.
+To verify parsing accuracy against the reference implementation:
 
 ```bash
-pip3 install claude-monitor
+pip install claude-monitor
 python3 -m claude_monitor --once --output json > tests/reference/snapshot.json
 python3 -m ccpet.compare tests/reference/snapshot.json
 ```
 
-내부 구조와 로그 파싱 시 주의할 점은 [CLAUDE.md](CLAUDE.md)에 정리되어 있습니다.
+`compare` clamps to the reference's own `generated_at` before comparing, so tokens spent
+between the two measurements do not show up as a false difference. It must keep reporting
+a **zero difference on all four token fields** — a screen that looks nice but reports the
+wrong number is a regression, not a feature.
+
+All test fixtures are hand-written synthetic data. Real transcripts contain real
+conversations and are never committed.
 
 ---
 
-## 라이선스
+## License
 
-MIT — [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).

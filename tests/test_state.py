@@ -154,8 +154,19 @@ def test_depletion_mode_empties_the_sea_as_you_spend():
         # 바다에서 사라진 만큼 배 위에 쌓인다. 총 마리 수는 보존된다.
         assert gs.fish + gs.on_boat == MAX_FISH_DRAWN, pct
 
-    # 축적 모드에서는 배에 쌓이지 않는다
+    # 축적 모드에서는 더미가 없다 — "사라진 만큼 쌓인다"는 고갈 모드만의 은유다
     assert to_game_state(snap(w, now=utc(11)), mode=config.CATCH).on_boat == 0
+
+
+def test_catch_mode_never_piles_even_over_the_cap():
+    """축적 모드는 24마리(MAX_FISH_DRAWN)를 넘겨도 더미를 만들지 않는다.
+
+    넘친 몫은 fish_uncapped(숫자)로만 남고 화면에는 안 그린다."""
+    big = window(inp=0, out=MAX_FISH_DRAWN * FISH_PER_TOKEN + FISH_PER_TOKEN * 3)
+    gs = to_game_state(snap(big, now=utc(11)), mode=config.CATCH)
+    assert gs.fish == MAX_FISH_DRAWN
+    assert gs.fish_uncapped == MAX_FISH_DRAWN + 3
+    assert gs.on_boat == 0
 
 
 def test_catch_mode_is_unaffected_by_percentage():
