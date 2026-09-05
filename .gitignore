@@ -14,3 +14,6 @@ build/
 
 # 생성물. 실제 사용량 숫자가 박혀 있다.
 tokenfishing.html
+
+# 대조군으로 옆에 클론해 두는 참조 구현. 남의 저장소라 커밋하지 않는다.
+Claude-Code-Usage-Monitor/
