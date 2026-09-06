@@ -37,6 +37,9 @@ STALE_MIN = 15
 앱 기록이 15분 간격이라 그 안쪽은 정상 지연이다. 그보다 오래됐다는 건 그 기기가
 한동안 Claude Code를 안 썼다는 뜻이고, 그때부터 다른 기기와 숫자가 갈린다."""
 
+BEE = "bee"
+"""`--bee` 전용 테마 키. 테마 토글 순환에는 안 낀다 (themes.SOLO_KEYS)."""
+
 ACTIVITY_SPEED = (0.10, 0.22, 0.45, 0.85)
 """활동 등급(4단계) → 움직이는 속도. 등급 이름은 테마마다 다르므로 순번으로 찾는다."""
 
@@ -46,9 +49,16 @@ def _mix(a, b, t: float) -> str:
 
 
 class Popup:
-    def __init__(self, root: tk.Tk, state: GameState) -> None:
+    def __init__(self, root: tk.Tk, state: GameState, theme: str | None = None) -> None:
+        """theme를 주면 그 테마 전용 화면이 된다 (`--bee`).
+
+        전용 화면은 축적 모드로 고정하고 토글을 전부 감춘다. 고른 값을
+        self.settings에 심지 않는 게 중요하다 — 그 dict는 build_state 안에서
+        그대로 저장될 수 있어서, 잠깐 띄운 화면의 테마가 설정 파일에 눌러앉는다.
+        """
         self.root = root
         self.state = state
+        self.solo = theme
         self.settings = config.load()
         # 창이 자기 언어를 스스로 정한다. main()에만 두면 창을 직접 만드는
         # 경로(테스트·다른 진입점)에서 라벨이 설정과 어긋난다.
@@ -95,14 +105,17 @@ class Popup:
             b.pack(side="left", fill="x", expand=True, padx=(0, 2))
             return b
 
-        self.theme_btn = button(self._next_theme)
-        self.spot_btn = button(self._next_spot)      # 낚시일 때만 보인다
-        self.mode_btn = button(self._toggle_mode)
-        self._apply_buttons()
+        # 전용 화면(--bee)에는 고를 게 없다. 눌러도 아무 효과 없는 버튼을
+        # 남겨두느니 막대 자체를 안 만든다.
+        if not self.solo:
+            self.theme_btn = button(self._next_theme)
+            self.spot_btn = button(self._next_spot)  # 낚시일 때만 보인다
+            self.mode_btn = button(self._toggle_mode)
+            self._apply_buttons()
 
         debug(f"start fill={state.fill_source} official={state.official_source} "
               f"pct={state.used_percentage} left={state.minutes_left} "
-              f"mode={self.settings['mode']} theme={self.settings['theme']}")
+              f"mode={state.mode} theme={state.theme}")
         self._apply_text()
         self._start_refresh()
         self._tick()
@@ -146,8 +159,17 @@ class Popup:
 
     @property
     def theme(self) -> themes.Theme:
-        base = themes.get(self.settings.get("theme"))
+        base = themes.get(self.solo or self.settings.get("theme"))
         return themes.apply_spot(base, self.settings.get("fishing_spot"))
+
+    def _build_state(self) -> GameState:
+        """전용 화면이면 테마와 모드를 덮어쓴다. settings를 복사해 고쳐 넘기면
+        안 되는 이유는 state.build_state의 주석 참고."""
+        return build_state(
+            self.settings,
+            mode=config.CATCH if self.solo else None,
+            theme=self.solo,
+        )
 
     def _reroll_layout(self) -> None:
         """고정물 x를 새로 뽑는다. 배경이 바뀔 때만 부른다 — 매 프레임 부르면
@@ -175,7 +197,7 @@ class Popup:
 
     def _commit_settings(self) -> None:
         config.save(self.settings)
-        self.state = build_state(self.settings)
+        self.state = self._build_state()
         # 테마가 바뀌면 색과 속도가 통째로 달라진다. 남겨두면 이전 테마의
         # 것들이 새 화면에 섞여 돌아다닌다.
         self.fish.clear()
@@ -193,7 +215,7 @@ class Popup:
                     return
                 try:
                     # 참조 하나를 통째로 갈아끼운다. GIL 덕에 락이 필요 없다.
-                    self.state = build_state(self.settings)
+                    self.state = self._build_state()
                     self.root.after(0, lambda: self.root.title(self._title()))
                     debug(f"fill={self.state.fill_source} "
                            f"official={self.state.official_source} "
@@ -436,7 +458,8 @@ USAGE_KO = f"""token fishing {__version__} - Claude 사용량 도트 팝업
   -d, --detach            백그라운드로 띄우고 셸을 돌려준다
       --lang ko|en        화면에 쓸 언어. 한 번 정하면 기억한다
                           (안 주면 시스템 언어를 따른다)
-      --animal            반려동물 화면으로 띄운다 (강아지·고양이·앵무새 ...)
+      --animal            반려동물 화면으로 띄운다 (강아지·고양이·앵무새·햄스터)
+      --bee               양봉장 화면으로 띄운다 (축적 모드 전용)
       --debug             진단 로그를 stderr로 출력한다
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
       --install-statusline
@@ -455,7 +478,8 @@ Options
   -d, --detach            run in the background and hand the shell back
       --lang ko|en        language for the window. Remembered once set
                           (defaults to your system language)
-      --animal            open the pet screen (dog, cat, parrot, ...)
+      --animal            open the pet screen (dog, cat, parrot, hamster)
+      --bee               open the apiary screen (fill mode only)
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
       --install-statusline
@@ -500,7 +524,7 @@ def main(argv: list[str] | None = None) -> int:
     i18n.set_lang(settings.get("lang"))
 
     unknown = [a for a in argv if a.startswith("-") and a not in {
-        "-d", "--detach", "--animal", "--debug", "--doctor",
+        "-d", "--detach", "--animal", "--bee", "--debug", "--doctor",
         "--install-statusline", "--uninstall-statusline",
         "-V", "--version", "-h", "--help",
     }]
@@ -546,7 +570,10 @@ def main(argv: list[str] | None = None) -> int:
     if "--animal" in argv:
         from .petpopup import AnimalPopup
 
-        AnimalPopup(root, build_state())
+        # 반려동물 화면에는 고갈 모드가 없다 — 밥그릇이 차는 것이 곧 사용량이다.
+        AnimalPopup(root, build_state(mode=config.CATCH))
+    elif "--bee" in argv:
+        Popup(root, build_state(mode=config.CATCH, theme=BEE), theme=BEE)
     else:
         Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다
     root.mainloop()

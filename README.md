@@ -52,7 +52,7 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 ## Themes
 
 The left button at the bottom of the window cycles through seven themes. Your choice is
-remembered.
+remembered. (An eighth, the apiary, opens only through `--bee`.)
 
 | Theme | Sky | Ground | Landmark | What is counted | When the window drains |
 |---|---|---|---|---|---|
@@ -100,13 +100,26 @@ the bowl — and the pet reacts to you:
 | Click the bowl | Walks over and eats |
 | Click anywhere else | Walks there |
 
-Five species, each with its own idle animation and gait: **dog** (tail wag), **cat**
-(upright tail), **parrot** (hops), **hedgehog** (slow waddle), **hamster** (dash and
-pause). The button at the bottom cycles through them.
+Four species, each with its own idle animation and gait: **dog** (tail wag), **cat**
+(upright tail), **parrot** (hops), **hamster** (dash and pause). The button at the bottom
+cycles through them.
+
+There is no mode button here: the bowl filling up *is* the usage, so this screen is
+accumulate-only.
+
+## Apiary mode
+
+```bash
+tokenfishing --bee
+```
+
+A meadow of flowers, two hives and a smoker, with the bees swarming as you spend. Like
+pet mode it is accumulate-only, and it stays out of the theme button's rotation — it opens
+only when you ask for it, and it does not disturb the theme or mode you had chosen.
 
 ## Display modes
 
-The right button switches between the two.
+The right button switches between the two. (Pet and apiary mode have neither button.)
 
 | Mode | Behaviour |
 |---|---|
@@ -271,6 +284,7 @@ tokenfishing [options]
   -d, --detach            run in the background and return the shell immediately
       --lang ko|en        language for the window (remembered; defaults to your system)
       --animal            open the pet screen instead of the landscape themes
+      --bee               open the apiary screen (accumulate only)
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
       --install-statusline
@@ -493,8 +507,8 @@ python3 -m pytest tests -q
 Self-checks for the drawing layers run standalone:
 
 ```bash
-python3 -m ccpet.themes     # 7 themes, 7 fishing spots
-python3 -m ccpet.animal     # 5 pets
+python3 -m ccpet.themes     # 8 themes, 7 fishing spots
+python3 -m ccpet.animal     # 4 pets
 ```
 
 To verify parsing accuracy against the reference implementation:

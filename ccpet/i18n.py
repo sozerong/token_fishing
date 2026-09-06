@@ -91,7 +91,7 @@ _EN: dict[str, str] = {
 
     # ---- 테마 이름 ----
     "낚시": "Fishing", "마을": "Village", "목장": "Ranch", "우주": "Space",
-    "정원": "Garden", "광산": "Mine", "도시": "City",
+    "정원": "Garden", "광산": "Mine", "도시": "City", "양봉": "Apiary",
 
     # ---- 낚시 배경 ----
     "바다 위": "Open sea", "부둣가": "Pier", "갯바위": "Rocks",
@@ -100,11 +100,11 @@ _EN: dict[str, str] = {
 
     # ---- 세는 것 / 활동 / 행위 ----
     "물고기": "fish", "주민": "villagers", "동물": "animals", "별": "stars",
-    "꽃": "flowers", "광석": "ore", "차": "cars",
+    "꽃": "flowers", "광석": "ore", "차": "cars", "벌": "bees",
     "입질": "Bites", "북적임": "Bustle", "울음소리": "Calls", "전파": "Signal",
-    "개화": "Bloom", "곡괭이질": "Picks", "교통량": "Traffic",
+    "개화": "Bloom", "곡괭이질": "Picks", "교통량": "Traffic", "날갯짓": "Wingbeat",
     "캐스팅": "casts", "방문": "visits", "먹이 주기": "feeds", "교신": "calls",
-    "물주기": "waterings", "채굴": "digs", "운행": "trips",
+    "물주기": "waterings", "채굴": "digs", "운행": "trips", "채밀": "harvests",
 
     # ---- 낚시 등급 ----
     "빈 바구니": "Empty basket", "잔챙이": "Small fry", "반 바구니": "Half basket",
@@ -141,19 +141,21 @@ _EN: dict[str, str] = {
     "정체": "Congested", "꽉 막힘": "Gridlock",
     "한밤": "Dead of night", "출퇴근": "Rush hour",
 
+    # ---- 양봉 ----
+    "빈 벌통": "Empty hive", "첫 벌": "First bee", "일벌 무리": "Worker swarm",
+    "꿀 절반": "Half honey", "꿀 가득": "Full honey",
+    "붕붕": "Buzzing", "벌떼": "Swarming",
+
     # ---- 반려동물 ----
-    "강아지": "Dog", "고양이": "Cat", "앵무새": "Parrot",
-    "고슴도치": "Hedgehog", "햄스터": "Hamster",
-    "사료": "kibble", "모이": "seed", "밀웜": "mealworms", "해바라기씨": "seeds",
+    "강아지": "Dog", "고양이": "Cat", "앵무새": "Parrot", "햄스터": "Hamster",
+    "사료": "kibble", "모이": "seed", "해바라기씨": "seeds",
     "꼬리질": "Tail", "그루밍": "Grooming", "지저귐": "Chirps",
-    "꼬물거림": "Wriggles", "볼주머니": "Cheeks", "간식": "treats", "씨앗": "seeds",
+    "볼주머니": "Cheeks", "간식": "treats", "씨앗": "seeds",
     "빈 그릇": "Empty bowl", "한 입": "A bite", "반 그릇": "Half bowl",
     "가득": "Full", "배 터짐": "Stuffed",
     "빈 모이통": "Empty feeder", "반 통": "Half feeder", "넘침": "Overflowing",
-    "한 마리": "One worm", "여러 마리": "Several", "그릇 넘침": "Overflowing",
-    "한 줌": "A handful",
+    "그릇 넘침": "Overflowing", "한 줌": "A handful",
     "신남": "Excited", "흥분": "Zoomies", "여유": "Relaxed", "산책": "Strolling",
     "장난기": "Playful", "조용": "Quiet", "종알종알": "Chatty", "수다": "Talkative",
-    "시끌벅적": "Raucous", "웅크림": "Curled up", "꼬물꼬물": "Wriggling",
-    "부산함": "Restless", "쳇바퀴": "On the wheel",
+    "시끌벅적": "Raucous", "부산함": "Restless", "쳇바퀴": "On the wheel",
 }

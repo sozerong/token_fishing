@@ -47,7 +47,7 @@ def record(theme: themes.Theme) -> list[tuple]:
 
 
 def test_every_theme_is_complete():
-    assert len(themes.THEMES) == 7, themes.THEME_KEYS
+    assert len(themes.THEMES) == 8, tuple(themes.THEMES)
     for key, theme in themes.THEMES.items():
         assert theme.key == key
         assert theme.name and theme.unit and theme.activity_word and theme.action_word
@@ -138,6 +138,18 @@ def test_units_live_where_the_theme_says():
     assert not themes.MINE.unit_drifts, "벽에 박힌 광석은 돌아다니지 않는다"
     assert not themes.MINE.unit_bobs, "벽에 박힌 광석은 위아래로도 흔들리지 않는다"
     assert not themes.CITY.unit_bobs, "차는 차선을 지킨다 — 위아래로 흔들리지 않는다"
+    assert themes.BEE.unit_band[0] < SEA, "벌은 지평선 위까지 날아오른다"
+
+
+def test_solo_themes_stay_out_of_the_toggle():
+    """--bee 전용 테마는 테마 버튼 순환에 끼면 안 된다.
+
+    양봉은 축적 모드 전용이라, 모드 토글이 있는 보통 화면에 섞이면 고갈
+    모드에서 아무것도 안 쌓이는 빈 화면이 된다.
+    """
+    for key in themes.SOLO_KEYS:
+        assert key in themes.THEMES, key
+        assert key not in themes.THEME_KEYS, key
 
 
 def test_pile_and_units_add_up_in_depletion_mode():

@@ -235,16 +235,6 @@ def _pile_cart(px: Px, theme: "Theme", x: float, y: float, count: int, t: int) -
     px(ox + 11, y + 1, 2, 2, "#3a3a3e")
 
 
-def _pile_lake(px: Px, theme: "Theme", x: float, y: float, count: int, t: int) -> None:
-    """차박·캠핑 전용. 고정물(차/텐트)은 땅 위, 잡은 물고기는 호수 쪽에 둔다.
-
-    호수는 화면에서 고정된 자리(_edge_lakeside 참고)라 고정물의 x(=랜덤 배치)를
-    따라가면 물 밖 땅으로 넘어간다 — 그래서 여기서는 x를 무시하고 고정 좌표를 쓴다."""
-    lx, ly = 100, HORIZON + 16
-    for i, (dx, dy) in enumerate(_HEAP_SLOTS[:count]):
-        theme.sprite(px, lx + dx, ly - dy, theme.unit_colors[i % 4], 1, t)
-
-
 @dataclass(frozen=True, slots=True)
 class Theme:
     key: str
@@ -630,6 +620,17 @@ def _car(px: Px, x: float, y: float, c: str, d: int, t: int) -> None:
     px(x + (6 if d > 0 else 0), y + 1, 1, 1, "#ffe08a")      # 전조등
 
 
+def _bee(px: Px, x: float, y: float, c: str, d: int, t: int) -> None:
+    """벌 한 마리. 줄무늬 몸통에 날개가 프레임마다 펄럭인다 — 벌은 멈춰 있어도
+    날갯짓은 한다."""
+    stripe = "#2a2018"
+    px(x + 1, y, 5, 3, c)                                    # 몸통
+    px(x + 3, y, 1, 3, stripe)                               # 줄무늬 — 하나면 충분하다.
+    px(x + (0 if d > 0 else 6), y + 1, 1, 2, stripe)         # 여러 줄 그으면 벌이 아니라
+    px(x + (6 if d > 0 else 0), y, 1, 2, stripe)             # 바코드로 보인다 (꽁무니·머리)
+    px(x + 2, y - (2 if (t // 2) % 2 else 1), 3, 1, "#dceeff")   # 날갯짓
+
+
 def _ambient_butterflies(px: Px, theme: "Theme", d: float, t: int) -> None:
     """마리 수와 무관한 배경 연출. 꽃은 심겨 있으니 나비가 대신 날아다닌다."""
     import math
@@ -655,6 +656,20 @@ def _ambient_minecart(px: Px, theme: "Theme", d: float, t: int) -> None:
     px(x + 1, rail_y - 5, 4, 1, "#8a8a94")                   # 테두리
     px(x + 1, rail_y, 1, 1, "#3a3a3e")                       # 바퀴
     px(x + 4, rail_y, 1, 1, "#3a3a3e")
+
+
+def _ambient_meadow(px: Px, theme: "Theme", d: float, t: int) -> None:
+    """양봉장 들판. 벌이 찾아갈 꽃이 깔려 있고 그 위로 꽃가루가 떠오른다.
+
+    꽃은 마리 수와 무관한 배경이라 자리를 규칙으로 고정한다 — 난수를 쓰면
+    매 프레임 꽃밭이 통째로 다시 심긴다."""
+    for i in range(0, W, 17):
+        fy = HORIZON + 9 + (i * 3 % 5) * 6
+        px(i + 4, fy, 1, 3, "#4a7d3f")                       # 줄기
+        px(i + 3, fy - 2, 3, 2, "#ffd6e8" if (i // 17) % 2 else "#fff2b8")
+    tint = "#ffe9a8" if d > 0.35 else "#c9a227"
+    for i in range(8):                                       # 떠오르는 꽃가루
+        px((i * 23 + t // 7) % W, H - 1 - (t * 0.25 + i * 13) % 56, 1, 1, tint)
 
 
 # ---------------------------------------------------------------- 고정물
@@ -783,6 +798,42 @@ def _tower(px: Px, x: float, y: float, t: int) -> None:
         for col in range(2):
             px(x + 15 + col * 3, y - 7 + row * 4, 2, 2, "#ffe08a")
     px(x + 6, y - 19, 1, 3, "#f85149")                       # 안테나
+
+
+def _hives(px: Px, x: float, y: float, t: int) -> None:
+    """양봉장. 벌통 두 채와 훈연기.
+
+    벌통은 다리로 땅에서 띄워 세운다(실제 양봉이 그렇다) — 그래서 밑동이
+    지평선에 닿는 대신 착륙판 아래로 그늘이 보인다."""
+    lid, box, rim, wood = "#8a4b3a", "#e8d9c0", "#c9b89a", "#5a4128"
+
+    px(x + 2, y + 4, 2, 2, wood)                             # 큰 벌통 — 받침 다리
+    px(x + 12, y + 4, 2, 2, wood)
+    px(x + 1, y - 1, 16, 5, box)                             # 아래 단
+    px(x + 1, y - 1, 16, 1, rim)
+    px(x + 1, y - 6, 16, 5, box)                             # 위 단 (한 단 더 쌓았다)
+    px(x + 1, y - 6, 16, 1, rim)
+    px(x, y - 9, 18, 3, lid)                                 # 지붕
+    px(x + 5, y + 2, 8, 2, "#3a2a18")                        # 입구
+    px(x + 4, y + 4, 10, 1, "#a97b4f")                       # 착륙판
+    if t % 90 < 45:                                          # 드나드는 벌
+        _bee(px, x + 14, y + 1, "#ffd166", 1, t)
+
+    bx = x + 22                                              # 작은 벌통 — 한 단짜리
+    px(bx + 1, y + 4, 2, 2, wood)
+    px(bx + 9, y + 4, 2, 2, wood)
+    px(bx, y - 1, 13, 5, "#dcd0b4")
+    px(bx, y - 1, 13, 1, rim)
+    px(bx - 1, y - 4, 15, 3, lid)
+    px(bx + 4, y + 2, 6, 2, "#3a2a18")
+    px(bx + 3, y + 4, 8, 1, "#a97b4f")
+
+    sx = x + 39                                              # 훈연기
+    px(sx, y + 1, 5, 5, "#6b6b76")
+    px(sx + 1, y, 3, 1, "#8a8a94")
+    px(sx + 3, y - 2, 2, 2, "#4a4a52")                       # 주둥이
+    for i in range(3):                                       # 피어오르는 연기
+        px(sx + 4 + i, y - 5 - i * 2 - (t // 8) % 3, 2, 1, "#c9c9d1")
 
 
 # ---------------------------------------------------------- 낚시 배경 고정물
@@ -1196,10 +1247,36 @@ CITY = Theme(
     pile=_pile_towers,                                        # 고갈 모드: 불 켜진 건물이 는다
 )
 
+BEE = Theme(
+    key="bee", name="양봉", unit="벌",
+    activity_word="날갯짓", action_word="채밀",
+    **labels(
+        ("빈 벌통", "첫 벌", "일벌 무리", "꿀 절반", "꿀 가득"),
+        ("빈 벌통", "첫 벌", "일벌 무리", "꿀 절반", "꿀 가득"),
+        ("잠잠", "느릿", "붕붕", "벌떼"),
+    ),
+    sky=((40, 32, 50), (150, 196, 224)),
+    ground=((30, 36, 24), (104, 138, 66)),
+    horizon="#c2e07a", horizon_dusk="#5b6440",
+    unit_colors=("#ffd166", "#ffb703", "#f0c14b", "#e8a33d"),
+    sprite=_bee, base=_hives,
+    sky_decor=_sky_clouds, edge=_edge_grass,
+    unit_band=(42, H - 10),                                   # 벌은 지평선 위까지 날아오른다
+    ambient=_ambient_meadow,
+    ground_sink=4,
+    base_bobs=False,
+    # pile 없음. 양봉은 축적 모드 전용이라(--bee) 더미가 그려질 일이 없다.
+)
+
 THEMES: dict[str, Theme] = {
-    t.key: t for t in (FISHING, VILLAGE, RANCH, SPACE, GARDEN, MINE, CITY)
+    t.key: t for t in (FISHING, VILLAGE, RANCH, SPACE, GARDEN, MINE, CITY, BEE)
 }
-THEME_KEYS = tuple(THEMES)
+
+SOLO_KEYS = ("bee",)
+"""자기 전용 실행 옵션(`--bee`)으로만 뜨는 테마. 토글 순환에는 안 낀다 —
+축적 모드 전용이라 모드 버튼이 있는 보통 화면에 섞으면 앞뒤가 안 맞는다."""
+
+THEME_KEYS = tuple(k for k in THEMES if k not in SOLO_KEYS)
 DEFAULT = FISHING.key
 
 
@@ -1214,7 +1291,7 @@ def _selfcheck() -> None:
     def px(x, y, w, h, color):
         drawn.append((x, y, w, h, color))
 
-    assert len(THEMES) == 7, THEME_KEYS
+    assert len(THEMES) == 8, tuple(THEMES)
     assert get("nope") is FISHING and get(None) is FISHING
 
     for key, theme in THEMES.items():

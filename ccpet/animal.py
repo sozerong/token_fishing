@@ -29,8 +29,11 @@ FLOOR = 82
 Mood = str
 """'idle' | 'walk' | 'eat' | 'play'. 동물마다 이 네 개를 다 그릴 줄 알아야 한다."""
 
-Draw = Callable[[Px, float, float, Mood, int, int], None]
-"""(px, x, y, mood, facing, frame) -> 동물 한 마리. facing 은 +1/-1."""
+Draw = Callable[[Px, float, float, Mood, int], None]
+"""(px, x, y, mood, frame) -> 동물 한 마리. (x, y)는 몸통 왼쪽 위.
+
+**전부 오른쪽을 보고 그린다.** 왼쪽을 볼 때는 팝업이 px를 뒤집어 넘긴다
+(petpopup._mirrored) — 좌우 두 벌을 손으로 그리면 한쪽만 고치는 실수가 난다."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,99 +81,146 @@ def hearts(px: Px, x: float, y: float, t: int) -> None:
 
 
 def bowl(px: Px, x: float, y: float, ratio: float, t: int) -> None:
-    """밥그릇. ratio(0~1)만큼 사료가 쌓인다 — 많이 쓸수록 그릇이 찬다."""
-    px(x, y + 3, 16, 4, "#6b6b76")                            # 그릇
-    px(x + 1, y + 2, 14, 2, "#8b8b96")
-    mound = max(0, round(ratio * 5))
+    """밥그릇. ratio(0~1)만큼 사료가 쌓인다 — 많이 쓸수록 그릇이 찬다.
+
+    ratio는 5시간 창을 얼마나 썼는지 그대로다. 이 화면에는 모드 토글이 없고
+    (축적 전용) 그릇이 차는 것 하나로 사용량을 읽는다."""
+    px(x, y + 4, 22, 5, "#6b6b76")                            # 그릇
+    px(x + 1, y + 2, 20, 3, "#8b8b96")
+    px(x + 1, y + 9, 20, 1, "#4a4a52")                        # 그림자
+    mound = max(0, round(ratio * 7))
     for i in range(mound):                                    # 쌓인 사료
-        w = 12 - i * 2
-        px(x + 2 + i, y + 2 - i, max(w, 2), 2, "#c9772f" if i % 2 else "#e3944a")
+        w = 18 - i * 2
+        px(x + 2 + i, y + 2 - i, max(w, 3), 2, "#c9772f" if i % 2 else "#e3944a")
     if ratio >= 0.8 and t % 40 < 10:                           # 배부르면 하트가 뜬다
-        hearts(px, x + 5, y - 6, t)
+        hearts(px, x + 8, y - 8, t)
 
 
 def toy(px: Px, x: float, y: float, t: int) -> None:
     """장난감 공. 가만히 있다가 살짝 튀는 정도만 — 눌러보라는 힌트."""
-    bob = 1 if (t // 20) % 4 == 0 else 0
-    px(x, y - bob, 6, 6, "#e3c447")
-    px(x + 1, y + 1 - bob, 2, 2, "#8a6a00")
+    bob = 2 if (t // 16) % 4 == 0 else 0
+    px(x, y - bob, 9, 9, "#e3c447")
+    px(x + 1, y + 1 - bob, 3, 3, "#f2e08a")                   # 광
+    px(x + 5, y + 5 - bob, 3, 3, "#8a6a00")
 
 
 # ------------------------------------------------------------------ 동물들
 # 전부 몸통 + 머리 + 다리 + 꼬리/특징. idle에서도 꼬리는 흔든다 — 완전히
 # 멈춰 보이면 화면이 죽어 보인다. eat은 머리를 숙이고, play는 통통 튄다.
+#
+# 몸통이 15~17픽셀이다. 밖에서 한 번 더 키워 그리므로(petpopup.PET_SCALE)
+# 이 해상도는 "크게 보이려고"가 아니라 **형태를 알아보려고** 쓴다 — 귀·주둥이·
+# 발·눈 하이라이트가 각각 제 픽셀을 갖는 최소 크기가 이 정도다.
 
 
 def _wag(t: int) -> int:
     """꼬리 흔들림. 대부분의 동물이 공유한다."""
-    return int(t * 0.4) % 6 - 3
+    return int(t * 0.55) % 6 - 3
 
 
-def _dog(px: Px, x: float, y: float, mood: Mood, facing: int, t: int) -> None:
-    head = x + (7 if facing > 0 else -3)
-    duck = 2 if mood == "eat" else 0
-    bounce = -2 if mood == "play" and (t // 5) % 2 == 0 else 0
-    px(x, y + duck + bounce, 9, 5, "#c98a5a")                # 몸통
-    px(head, y - 2 + duck + bounce, 4, 4, "#c98a5a")         # 머리
-    px(head + (3 if facing > 0 else -1), y - 1 + duck, 1, 1, "#3d2a16")  # 눈
-    px(head + (0 if facing > 0 else 3), y + 2 + duck, 2, 2, "#8a6a4a")   # 귀
-    tail = x + (-2 if facing > 0 else 9)
-    px(tail, y + bounce + _wag(t) // 2, 2, 3, "#c98a5a")     # 꼬리
-    if mood == "walk":
-        px(x + 1, y + 5, 1, 1, "#5a4632")
-        px(x + 6, y + 5, 1, 1, "#5a4632")
+def _bob(mood: Mood, t: int, drop: int = 3, jump: int = 3) -> int:
+    """먹을 땐 몸을 숙이고, 놀 땐 통통 튄다. 네 동물이 같은 규칙을 쓴다."""
+    return (drop if mood == "eat" else 0) - (
+        jump if mood == "play" and (t // 4) % 2 else 0
+    )
 
 
-def _cat(px: Px, x: float, y: float, mood: Mood, facing: int, t: int) -> None:
-    head = x + (6 if facing > 0 else -2)
-    duck = 2 if mood == "eat" else 0
-    bounce = -1 if mood == "play" and (t // 4) % 2 == 0 else 0
-    px(x, y + duck + bounce, 8, 4, "#5a5a66")                # 몸통
-    px(head, y - 2 + duck + bounce, 4, 4, "#5a5a66")         # 머리
-    px(head + 1, y - 3 + duck, 1, 1, "#5a5a66")              # 귀 (뾰족)
-    px(head + 2, y - 3 + duck, 1, 1, "#5a5a66")
-    px(head + (3 if facing > 0 else -1), y - 1 + duck, 1, 1, "#7ee787")  # 눈
-    tail_x = x + (-1 if facing > 0 else 8)
-    tail_y = y + bounce - 2 + _wag(t)
-    px(tail_x, tail_y, 1, 4, "#5a5a66")                      # 꼬리 (도도하게 위로)
+def _stride(mood: Mood, t: int) -> int:
+    """걸을 때 앞뒤 다리가 엇갈리는 폭. 서 있으면 0."""
+    return (t // 4) % 2 if mood == "walk" else 0
 
 
-def _parrot(px: Px, x: float, y: float, mood: Mood, facing: int, t: int) -> None:
-    hop = -3 if mood in ("walk", "play") and (t // 6) % 2 == 0 else 0
-    head = x + (5 if facing > 0 else -1)
-    px(x, y + hop, 6, 6, "#7ee787")                          # 몸통
-    px(head, y - 3 + hop, 4, 4, "#7ee787")                   # 머리
-    px(head + (3 if facing > 0 else -1), y - 2 + hop, 1, 1, "#0d1117")  # 눈
-    px(head + (1 if facing > 0 else 0), y - 5 + hop, 2, 2, "#ffd166")   # 볏
-    px(x + (5 if facing > 0 else -2), y - 4 + hop, 2, 1, "#f0e6d2")     # 부리
-    wing = _wag(t) // 3
-    px(x + 1, y + 2 + hop + wing, 4, 2, "#4a9d5f")           # 날개
+def _dog(px: Px, x: float, y: float, mood: Mood, t: int) -> None:
+    fur, dark, pale = "#c98a5a", "#95602f", "#f0dcc0"
+    dy, step = _bob(mood, t), _stride(mood, t)
+    px(x, y + dy, 17, 9, fur)                                # 몸통
+    px(x, y + dy, 17, 1, dark)                               # 등 그늘
+    px(x + 3, y + 7 + dy, 11, 2, pale)                       # 배 — 안쪽으로 좁게 넣는다.
+    #                                                          몸통 폭을 다 채우면
+    #                                                          털이 아니라 페인트로 보인다
+    px(x + 1, y + 9 + dy, 3, 5 - step, dark)                 # 다리 넷
+    px(x + 5, y + 9 + dy, 3, 4 + step, fur)
+    px(x + 10, y + 9 + dy, 3, 4 + step, dark)
+    px(x + 14, y + 9 + dy, 3, 5 - step, fur)
+    hx, hy = x + 12, y - 7 + dy
+    px(hx, hy, 9, 8, fur)                                    # 머리
+    px(hx + 6, hy + 4, 5, 4, pale)                           # 주둥이
+    px(hx + 9, hy + 4, 2, 2, "#2a2018")                      # 코
+    px(hx + 5, hy + 2, 2, 2, "#2a2018")                      # 눈
+    px(hx + 6, hy + 2, 1, 1, "#ffffff")
+    px(hx - 1, hy + 1, 3, 6, dark)                           # 늘어진 귀
+    px(x + 11, y + 1 + dy, 6, 2, "#f85149")                  # 목줄
+    wag = _wag(t)
+    px(x - 3, y - 1 + wag // 2 + dy, 4, 3, fur)              # 꼬리
+    px(x - 5, y - 3 + wag + dy, 3, 3, fur)
     if mood == "eat":
-        px(head + (1 if facing > 0 else 0), y - 1, 1, 2, "#f0e6d2")
+        px(hx + 7, hy + 8, 2, 2, "#ff8fab")                  # 혀
 
 
-def _hedgehog(px: Px, x: float, y: float, mood: Mood, facing: int, t: int) -> None:
-    duck = 1 if mood == "eat" else 0
-    px(x, y + duck, 9, 4, "#8a6a4a")                          # 몸통(가시)
-    for i in range(0, 9, 2):                                 # 가시 텍스처
-        px(x + i, y - 1 + duck, 1, 1, "#5a4632")
-    nose = x + (9 if facing > 0 else -1)
-    px(nose, y + 1 + duck, 2, 2, "#e8c39e")                  # 코 끝 살색
-    px(nose + (1 if facing > 0 else 0), y + 2 + duck, 1, 1, "#0d1117")
-    if mood == "play":                                        # 놀 때만 몸을 만다
-        px(x + 2, y - 1, 4, 2, "#5a4632")
+def _cat(px: Px, x: float, y: float, mood: Mood, t: int) -> None:
+    coat, dark, pale = "#6b6b7a", "#494956", "#c9c9d6"
+    dy, step = _bob(mood, t, jump=2), _stride(mood, t)
+    px(x, y + dy, 16, 8, coat)                               # 몸통
+    px(x + 3, y + 6 + dy, 9, 2, pale)                        # 배
+    px(x, y + dy, 16, 2, dark)                               # 등을 따라 어두운 결
+    for i in (4, 8, 12):                                     # 등에서 내려오는 줄무늬.
+        px(x + i, y + dy, 1, 4, dark)                        # 굵게 그으면 창살이 된다
+    px(x + 1, y + 8 + dy, 3, 5 - step, dark)                 # 다리 넷
+    px(x + 5, y + 8 + dy, 3, 4 + step, coat)
+    px(x + 9, y + 8 + dy, 3, 4 + step, dark)
+    px(x + 13, y + 8 + dy, 3, 5 - step, coat)
+    hx, hy = x + 11, y - 7 + dy
+    px(hx, hy, 8, 7, coat)                                   # 머리
+    px(hx, hy - 3, 2, 3, coat)                               # 쫑긋한 귀
+    px(hx + 6, hy - 3, 2, 3, coat)
+    px(hx + 1, hy - 2, 1, 2, "#ff8fab")
+    px(hx + 4, hy + 2, 2, 2, "#7ee787")                      # 눈
+    px(hx + 7, hy + 2, 1, 2, "#7ee787")
+    px(hx + 5, hy + 5, 3, 2, pale)                           # 주둥이
+    px(hx + 6, hy + 4, 1, 1, "#ff8fab")                      # 코
+    px(x - 3, y - 3 + dy, 3, 8, coat)                        # 꼬리 (도도하게 위로)
+    px(x - 4, y - 6 + _wag(t) + dy, 3, 4, coat)
 
 
-def _hamster(px: Px, x: float, y: float, mood: Mood, facing: int, t: int) -> None:
-    duck = 1 if mood == "eat" else 0
-    puff = 1 if (t // 15) % 3 == 0 else 0                     # 볼주머니가 가끔 빵빵
-    px(x, y + duck, 7, 4, "#e8c39e")                          # 몸통
-    head = x + (5 if facing > 0 else -2)
-    px(head, y - 1 + duck, 4, 3, "#e8c39e")                   # 머리
-    px(head + (2 if facing > 0 else -1), y + duck, 1 + puff, 1 + puff, "#d9a876")  # 볼
-    px(head + (3 if facing > 0 else -1), y - 1 + duck, 1, 1, "#0d1117")  # 눈
-    px(x + 1, y - 2, 1, 1, "#e8c39e")                          # 귀
-    px(x + 5, y - 2, 1, 1, "#e8c39e")
+def _parrot(px: Px, x: float, y: float, mood: Mood, t: int) -> None:
+    body, wing, belly = "#5ad06a", "#3f9d5f", "#ffe08a"
+    hop = -4 if mood in ("walk", "play") and (t // 4) % 2 else 0
+    dy = (3 if mood == "eat" else 0) + hop
+    px(x + 2, y + dy, 11, 13, body)                          # 몸통
+    px(x + 4, y + 6 + dy, 7, 6, belly)                       # 배
+    px(x + 1, y + 2 + dy, 5, 9, wing)                        # 접은 날개
+    px(x + 2, y + 3 + dy + ((t // 3) % 2), 3, 6, body)       # 날개 결
+    hx, hy = x + 7, y - 8 + dy
+    px(hx, hy, 8, 9, body)                                   # 머리
+    px(hx + 5, hy + 3, 4, 4, "#f0e6d2")                      # 부리
+    px(hx + 6, hy + 5, 3, 2, "#c9a227")
+    px(hx + 3, hy + 2, 2, 2, "#0d1117")                      # 눈
+    px(hx + 4, hy + 2, 1, 1, "#ffffff")
+    px(hx + 1, hy - 4, 2, 4, "#f85149")                      # 볏
+    px(hx + 3, hy - 5, 2, 5, "#ffd166")
+    px(x - 3, y + 9 + dy, 6, 4, wing)                        # 꼬리깃
+    px(x + 4, y + 13 + dy, 2, 3, "#c9a227")                  # 발
+    px(x + 8, y + 13 + dy, 2, 3, "#c9a227")
+
+
+def _hamster(px: Px, x: float, y: float, mood: Mood, t: int) -> None:
+    fur, dark, pale = "#e0b380", "#b98a56", "#fff0dc"
+    dy = _bob(mood, t, drop=2, jump=2)
+    puff = 2 if mood == "eat" or (t // 12) % 3 == 0 else 0    # 볼주머니가 빵빵해진다
+    px(x, y + dy, 15, 10, fur)                               # 통통한 몸
+    px(x + 3, y + 7 + dy, 9, 3, pale)                        # 배
+    px(x + 1, y + 10 + dy, 3, 3, dark)                       # 짧은 다리
+    px(x + 10, y + 10 + dy, 3, 3, dark)
+    hx, hy = x + 9, y - 4 + dy
+    px(hx, hy, 8, 9, fur)                                    # 머리
+    px(hx + 1, hy - 2, 3, 3, fur)                            # 동그란 귀
+    px(hx + 5, hy - 2, 3, 3, fur)
+    px(hx + 2, hy - 1, 1, 1, "#ff8fab")
+    px(hx - 1, hy + 4, 3 + puff, 4 + puff, fur)              # 볼주머니
+    px(hx + 5, hy + 3, 2, 2, "#0d1117")                      # 눈
+    px(hx + 6, hy + 3, 1, 1, "#ffffff")
+    px(hx + 7, hy + 6, 2, 2, "#ff8fab")                      # 코
+    px(x - 2, y + 3 + dy, 2, 2, pale)                        # 짧은 꼬리
 
 
 PETS: dict[str, Pet] = {
@@ -182,7 +232,7 @@ PETS: dict[str, Pet] = {
                 ("빈 그릇", "한 입", "반 그릇", "가득", "배 터짐"),
                 ("낮잠", "느긋", "신남", "흥분"),
             ),
-            draw=_dog, speed=0.55, style="walk",
+            draw=_dog, speed=0.95, style="walk",
         ),
         Pet(
             "cat", "고양이", unit="사료", activity_word="그루밍", action_word="간식",
@@ -191,7 +241,7 @@ PETS: dict[str, Pet] = {
                 ("빈 그릇", "한 입", "반 그릇", "가득", "배 터짐"),
                 ("낮잠", "여유", "산책", "장난기"),
             ),
-            draw=_cat, speed=0.45, style="walk",
+            draw=_cat, speed=0.8, style="walk",
         ),
         Pet(
             "parrot", "앵무새", unit="모이", activity_word="지저귐", action_word="모이",
@@ -200,17 +250,7 @@ PETS: dict[str, Pet] = {
                 ("빈 모이통", "한 입", "반 통", "가득", "넘침"),
                 ("조용", "종알종알", "수다", "시끌벅적"),
             ),
-            draw=_parrot, speed=0.5, style="hop",
-        ),
-        Pet(
-            "hedgehog", "고슴도치", unit="밀웜", action_word="밀웜",
-            activity_word="꼬물거림",
-            **labels(
-                ("빈 그릇", "한 마리", "여러 마리", "가득", "그릇 넘침"),
-                ("빈 그릇", "한 마리", "여러 마리", "가득", "그릇 넘침"),
-                ("웅크림", "느릿", "꼬물꼬물", "부산함"),
-            ),
-            draw=_hedgehog, speed=0.2, style="walk",
+            draw=_parrot, speed=1.6, style="hop",             # 깡충 뛰는 사이 멈춰 선다
         ),
         Pet(
             "hamster", "햄스터", unit="해바라기씨", action_word="씨앗",
@@ -220,7 +260,7 @@ PETS: dict[str, Pet] = {
                 ("빈 그릇", "한 줌", "반 그릇", "가득", "그릇 넘침"),
                 ("잠듦", "느긋", "부산함", "쳇바퀴"),
             ),
-            draw=_hamster, speed=0.65, style="dash",
+            draw=_hamster, speed=1.15, style="dash",
         ),
     )
 }
@@ -239,7 +279,7 @@ def _selfcheck() -> None:
     def px(x, y, w, h, color):
         drawn.append((x, y, w, h, color))
 
-    assert len(PETS) == 5, PET_KEYS
+    assert len(PETS) == 4, PET_KEYS
     assert get("no-such-pet") is PETS[DEFAULT]
 
     for key, pet in PETS.items():
@@ -251,7 +291,7 @@ def _selfcheck() -> None:
 
         for mood in ("idle", "walk", "eat", "play"):
             before = len(drawn)
-            pet.draw(px, 40, 40, mood, 1, 30)
+            pet.draw(px, 40, 40, mood, 30)
             assert len(drawn) > before, f"{key}/{mood}: 아무것도 안 그린다"
 
     before = len(drawn)

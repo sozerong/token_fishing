@@ -20,14 +20,13 @@ def record_pet(pet: animal.Pet) -> list[tuple]:
         dots.append((x, y, w, h, color))
 
     for mood in ("idle", "walk", "eat", "play"):
-        for facing in (1, -1):
-            for frame in (0, 37, 120):
-                pet.draw(px, 60, 60, mood, facing, frame)
+        for frame in (0, 37, 120):
+            pet.draw(px, 60, 60, mood, frame)
     return dots
 
 
 def test_every_pet_is_complete():
-    assert len(animal.PETS) == 5, animal.PET_KEYS
+    assert len(animal.PETS) == 4, animal.PET_KEYS
     for key, pet in animal.PETS.items():
         assert pet.key == key
         assert pet.name and pet.unit and pet.activity_word and pet.action_word
@@ -67,6 +66,24 @@ def test_nothing_is_drawn_outside_the_canvas():
         for x, y, w, h, _ in record_pet(pet):
             assert -SLACK <= x and x + w <= animal.W + SLACK, f"{key}: 가로 이탈"
             assert -SLACK <= y and y + h <= animal.H + SLACK, f"{key}: 세로 이탈"
+
+
+def test_pets_fit_inside_the_roaming_area():
+    """키운 몸이 벽에 잘리면 안 된다.
+
+    animal.py의 스프라이트 크기와 petpopup의 배율·여백은 서로 모르는 채로
+    커졌다 — 둘을 곱해서 방 안에 들어가는지 여기서 확인한다.
+    """
+    from ccpet import petpopup
+
+    for key, pet in animal.PETS.items():
+        dots = record_pet(pet)                       # 기준점은 (60, 60)
+        right = max(x + w for x, _, w, _, _ in dots) - 60
+        below = max(y + h for _, y, _, h, _ in dots) - 60
+        assert right * petpopup.PET_SCALE <= petpopup.ROAM_MARGIN, f"{key}: 좌우가 잘린다"
+        assert below * petpopup.PET_SCALE <= animal.H - petpopup.ROAM_BOTTOM, (
+            f"{key}: 발이 창 밖으로 나간다"
+        )
 
 
 def test_bowl_fills_up_with_ratio():

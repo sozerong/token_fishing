@@ -24,22 +24,46 @@ from .state import GameState, _level, build_state
 SCALE = 2
 W, H = animal.W, animal.H
 FRAME_MS = 66
-PET_SCALE = 2.0
+PET_SCALE = 1.4
 """동물 스프라이트 확대 배율. animal.py의 그리기 함수는 그대로 두고, 동물의
-발밑(pos)을 중심으로 픽셀 사각형을 키워서 그린다."""
+기준점(pos)을 축으로 픽셀 사각형을 키워서 그린다.
 
-BOWL_AT = (10, animal.FLOOR - 2)
-TOY_AT = (144, animal.FLOOR + 18)
-BOWL_TARGET = (BOWL_AT[0] + 8, BOWL_AT[1] + 6)
-TOY_TARGET = (TOY_AT[0] + 3, TOY_AT[1] + 6)
+스프라이트 자체가 커진 뒤로는 배율이 낮아도 화면에서 더 크다. 배율만 올려
+키우면 픽셀 덩어리만 커지고 형태는 그대로다 — 크기는 여기서, 형태는
+animal.py에서 늘린다."""
 
-ROAM_MARGIN = 18
-"""동물이 돌아다니는 벽. 2배로 키운 몸이 벽/모서리에 잘리지 않을 만큼 안쪽으로."""
+BOWL_AT = (24, animal.FLOOR + 2)
+TOY_AT = (142, animal.FLOOR + 16)
+BOWL_TARGET = (BOWL_AT[0] + 11, BOWL_AT[1] + 6)
+TOY_TARGET = (TOY_AT[0] - 13, TOY_AT[1] + 6)
+"""걸어가서 설 자리. 기준점이 아니라 **머리**가 그릇/공에 닿아야 한다.
+
+밥그릇은 오른쪽에서 다가가므로(왼쪽을 보게 된다) 머리가 기준점에 오고, 장난감은
+왼쪽에서 다가가므로 머리가 기준점보다 한 몸 앞에 온다 — 그만큼 미리 물러 세운다.
+둘 다 ROAM_MARGIN 안쪽이라 모서리에서 잘리지도 않는다."""
+
+MIRROR_AXIS = 8
+"""좌우 반전의 축(기준점에서 오른쪽으로). 스프라이트 한가운데다.
+
+기준점 자체를 축으로 뒤집으면 왼쪽을 볼 때 몸 전체가 기준점 왼쪽으로 넘어가서,
+밥그릇으로 걸어가도 머리가 그릇에서 한참 떨어진 데 가 있다."""
+
+ROAM_MARGIN = 34
+"""동물이 돌아다니는 좌우 벽. 키운 몸(기준점에서 오른쪽으로 최대 23px × 배율)이
+모서리에 잘리지 않을 만큼 안쪽으로."""
+
+ROAM_TOP, ROAM_BOTTOM = animal.FLOOR - 4, H - 28
+"""돌아다니는 세로 구간. 기준점은 몸통 왼쪽 위라 발은 여기서 한참 아래에 찍힌다 —
+위쪽은 걸레받이보다 조금 높아도 발이 바닥에 놓이고(멀리 있는 것처럼 보인다),
+아래쪽은 발이 창밖으로 나가지 않을 만큼 띄운다."""
+
+TOUCH = 16
+"""동물을 클릭한 것으로 칠 반경. 몸이 커진 만큼 같이 넓혔다."""
 
 STYLE_FACTOR = {
     "walk": lambda t: 1.0,
-    "hop": lambda t: 1.0 if (t // 6) % 2 == 0 else 0.0,
-    "dash": lambda t: 1.8 if (t // 15) % 3 == 2 else 0.5,
+    "hop": lambda t: 1.0 if (t // 4) % 2 == 0 else 0.0,      # 깡충 - 멈춤 - 깡충
+    "dash": lambda t: 1.8 if (t // 12) % 3 == 2 else 0.5,
 }
 
 
@@ -53,7 +77,7 @@ class AnimalPopup:
         i18n.set_lang(self.settings.get("lang"))
         self.frame = 0
 
-        self.pos = [W / 2, animal.FLOOR + 20]
+        self.pos = [W / 2, (ROAM_TOP + ROAM_BOTTOM) / 2]
         self.facing = 1
         self.mood = "idle"
         self.target: tuple[float, float] | None = None
@@ -96,11 +120,12 @@ class AnimalPopup:
             b.pack(side="left", fill="x", expand=True, padx=(0, 2))
             return b
 
+        # 버튼은 동물 고르기 하나뿐이다. 이 화면에는 고갈 모드가 없다 —
+        # 밥그릇이 차는 것이 곧 사용량이라, 거꾸로 비워지면 은유가 뒤집힌다.
         self.pet_btn = button(self._next_pet)
-        self.mode_btn = button(self._toggle_mode)
         self._apply_buttons()
 
-        debug(f"start(animal) pet={self.settings['pet']} mode={self.settings['mode']} "
+        debug(f"start(animal) pet={self.settings['pet']} "
               f"fill={state.fill_source} pct={state.used_percentage}")
         self._apply_text()
         self._start_refresh()
@@ -124,7 +149,6 @@ class AnimalPopup:
 
     def _apply_buttons(self) -> None:
         self.pet_btn.configure(text=i18n.t(self.pet.name))
-        self.mode_btn.configure(text=i18n.t(config.MODE_LABELS[self.settings["mode"]]))
 
     def _next_pet(self) -> None:
         self.settings["pet"] = config.next_in(
@@ -132,13 +156,15 @@ class AnimalPopup:
         )
         self._commit_settings()
 
-    def _toggle_mode(self) -> None:
-        self.settings["mode"] = config.next_in(config.MODES, self.settings["mode"])
-        self._commit_settings()
+    def _build_state(self) -> GameState:
+        """축적 모드로 고정한다. settings를 복사해 고치지 않는 이유는
+        state.build_state의 주석 참고 — 여기서 정한 모드가 설정 파일에
+        눌러앉으면 보통 화면의 고갈 모드가 조용히 풀린다."""
+        return build_state(self.settings, mode=config.CATCH)
 
     def _commit_settings(self) -> None:
         config.save(self.settings)
-        self.state = build_state(self.settings)
+        self.state = self._build_state()
         self.root.title(self._title())
         self._apply_buttons()
         self._apply_text()
@@ -151,7 +177,7 @@ class AnimalPopup:
                 if self._stop.wait(10):
                     return
                 try:
-                    self.state = build_state(self.settings)
+                    self.state = self._build_state()
                     self.root.after(0, lambda: self.root.title(self._title()))
                     debug(f"fill={self.state.fill_source} pct={self.state.used_percentage}")
                 except Exception as e:  # noqa: BLE001
@@ -222,18 +248,18 @@ class AnimalPopup:
         vx, vy = event.x / SCALE, event.y / SCALE
         # 동물 자체를 클릭하면 쓰다듬는다 — 반려동물 앱에서 가장 기본적인
         # 상호작용이다. 그 자리로 "걸어가라"는 명령으로 처리하면 이상하다.
-        if abs(vx - self.pos[0]) < 8 and abs(vy - self.pos[1]) < 8:
+        if abs(vx - self.pos[0]) < TOUCH and abs(vy - self.pos[1]) < TOUCH:
             self.target, self.target_kind = None, None
             self.mood, self.busy_until = "pet", self.frame + 40
             return
-        if abs(vx - TOY_TARGET[0]) < 10 and abs(vy - TOY_TARGET[1]) < 10:
+        if abs(vx - TOY_TARGET[0]) < 12 and abs(vy - TOY_TARGET[1]) < 12:
             self.target, self.target_kind = TOY_TARGET, "toy"
-        elif abs(vx - BOWL_TARGET[0]) < 12 and abs(vy - BOWL_TARGET[1]) < 10:
+        elif abs(vx - BOWL_TARGET[0]) < 14 and abs(vy - BOWL_TARGET[1]) < 12:
             self.target, self.target_kind = BOWL_TARGET, "bowl"
         else:
             self.target = (
                 max(ROAM_MARGIN, min(W - ROAM_MARGIN, vx)),
-                max(animal.FLOOR + 6, min(H - 10, vy)),
+                max(ROAM_TOP, min(ROAM_BOTTOM, vy)),
             )
             self.target_kind = None
         self.busy_until = 0  # 먹거나 놀던 중이어도 클릭하면 바로 반응한다
@@ -247,11 +273,22 @@ class AnimalPopup:
         )
 
     def _px_pet(self, ox: float, oy: float, x: float, y: float, w: int, h: int, color: str) -> None:
-        """동물 그리기 전용. (ox, oy) 발밑을 축으로 PET_SCALE배 키워서 찍는다."""
+        """동물 그리기 전용. (ox, oy) 기준점을 축으로 PET_SCALE배 키워서 찍는다."""
         self._px(
             ox + (x - ox) * PET_SCALE, oy + (y - oy) * PET_SCALE,
             max(1, round(w * PET_SCALE)), max(1, round(h * PET_SCALE)), color,
         )
+
+    def _pet_px(self):
+        """이번 프레임의 동물용 px. 확대에 좌우 반전까지 얹어서 돌려준다.
+
+        animal.py는 오른쪽만 보고 그린다 — 왼쪽을 볼 때 여기서 기준점을 축으로
+        x를 뒤집는다. 좌우 두 벌을 손으로 그리면 한쪽만 고치는 실수가 난다."""
+        ox, oy = self.pos
+        if self.facing > 0:
+            return lambda x, y, w, h, c: self._px_pet(ox, oy, x, y, w, h, c)
+        axis = ox + MIRROR_AXIS
+        return lambda x, y, w, h, c: self._px_pet(ox, oy, 2 * axis - x - w, y, w, h, c)
 
     def _step_pet(self) -> None:
         t = self.frame
@@ -261,7 +298,7 @@ class AnimalPopup:
             if t >= self.next_wander:
                 self.target = (
                     random.uniform(ROAM_MARGIN, W - ROAM_MARGIN),
-                    random.uniform(animal.FLOOR + 6, H - 10),
+                    random.uniform(ROAM_TOP, ROAM_BOTTOM),
                 )
                 self.target_kind = None
             return
@@ -276,7 +313,7 @@ class AnimalPopup:
             else:
                 self.mood = "idle"
             self.target = None
-            self.next_wander = t + random.randint(60, 200)
+            self.next_wander = t + random.randint(25, 90)     # 한자리에 오래 서 있지 않는다
             return
         self.facing = 1 if dx >= 0 else -1
         self.mood = "walk"
@@ -291,10 +328,9 @@ class AnimalPopup:
         animal.bowl(self._px, *BOWL_AT, self._food_ratio(), t)
         animal.toy(self._px, *TOY_AT, t)
         px, py = self.pos
-        pet_px = lambda x, y, w, h, color: self._px_pet(px, py, x, y, w, h, color)
-        self.pet.draw(pet_px, px, py, self.mood, self.facing, t)
+        self.pet.draw(self._pet_px(), px, py, self.mood, t)
         if self.mood == "pet":                                # 쓰다듬는 중 — 하트가 뜬다
-            animal.hearts(self._px, px - 2, py - 10, t)
+            animal.hearts(self._px, px + 4, py - 16, t)
 
         if not self.state.is_fishing:
             self.canvas.create_rectangle(
