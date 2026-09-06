@@ -15,41 +15,82 @@
 
 from __future__ import annotations
 
-import locale
-import os
+DEFAULT = "en"
+"""기본 언어.
 
-LANG = "ko"
-"""지금 쓰는 언어. popup.main()이 시작할 때 한 번 정한다."""
+한때 시스템 로케일을 따라갔다. 그러면 한국어 로케일 기기에서 처음 켠 사람에게만
+한국어가 나오는데, 그 기준으로는 이 도구를 받는 사람 대다수가 못 읽는 화면을 본다.
+읽을 사람이 정하게 두는 게 낫다 — 기본은 영어, `--ko`를 주면 한국어."""
+
+LANG = DEFAULT
+"""지금 쓰는 언어. 각 진입점이 시작할 때 한 번 정한다."""
 
 CHOICES = ("ko", "en")
 
+EXPLICIT = False
+"""이번 실행에서 언어를 인자로 골랐는가.
 
-def system_lang() -> str:
-    """시스템이 한국어면 ko, 아니면 en.
-
-    환경변수를 먼저 본다 — 리눅스·macOS에서는 이쪽이 실제로 쓰는 값이고,
-    locale.getlocale()은 setlocale을 안 부른 상태에서 None이 나오기도 한다.
-    """
-    for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
-        value = os.environ.get(name, "")
-        if value:
-            return "ko" if value.lower().startswith("ko") else "en"
-    try:
-        loc = (locale.getlocale()[0] or "").lower()
-    except (ValueError, TypeError):
-        loc = ""
-    return "ko" if loc.startswith("ko") or "korea" in loc else "en"
+창이 뜰 때 설정 파일을 다시 읽어 언어를 정하는데(popup.Popup 참고), 그게
+`--ko`를 덮어써서 "플래그를 줬는데 창만 영어"가 된다. 그 덮어쓰기를 막는 표시."""
 
 
 def resolve(setting: str | None) -> str:
-    """설정값 -> 실제로 쓸 언어. 모르는 값이면 시스템에 맡긴다."""
-    return setting if setting in CHOICES else system_lang()
+    """설정값 -> 실제로 쓸 언어. 모르는 값이면 기본값."""
+    return setting if setting in CHOICES else DEFAULT
 
 
 def set_lang(code: str | None) -> str:
     global LANG
     LANG = resolve(code)
     return LANG
+
+
+def pick(ko: str, en: str) -> str:
+    """골라 쓴 언어의 문장. 번역표에 넣을 만큼 재사용되지 않는 한 줄짜리용."""
+    return ko if LANG == "ko" else en
+
+
+def init(argv: list[str]) -> list[str]:
+    """`--ko` / `--en` / `--lang ko|en` 을 떼어내고 언어를 정한다.
+
+    모든 진입점(창, 콘솔, --doctor)이 이걸 부른다. 한 곳에서 정해야 창은
+    영어인데 콘솔만 한국어인 상태가 안 생긴다.
+
+    `--ko`/`--en`은 **그 실행에만** 적용된다. `--lang ko`는 설정에 적어 둔다 —
+    창은 아이콘으로도 띄우니 매번 플래그를 붙일 수가 없어서 기억할 자리가 필요하다.
+    한 번 준 플래그가 조용히 눌러앉는 것보다, 기억할지 말지를 이름으로 가르는 게 낫다.
+
+    돌려주는 값은 언어 관련 인자를 걷어낸 나머지 argv.
+    """
+    global EXPLICIT
+    from . import config
+
+    rest: list[str] = []
+    chosen: str | None = None
+    remember: str | None = None
+    skip = False
+    for i, arg in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        if arg in ("--ko", "--en"):
+            chosen = arg[2:]
+        elif arg == "--lang":
+            nxt = argv[i + 1] if i + 1 < len(argv) else None
+            if nxt not in CHOICES:
+                raise ValueError(f"--lang needs one of: {', '.join(CHOICES)}")
+            chosen = remember = nxt
+            skip = True
+        else:
+            rest.append(arg)
+
+    settings = config.load()
+    if remember and remember != settings.get("lang"):
+        settings["lang"] = remember
+        config.save(settings)
+    EXPLICIT = chosen is not None
+    set_lang(chosen or settings.get("lang"))
+    return rest
 
 
 def t(text: str) -> str:

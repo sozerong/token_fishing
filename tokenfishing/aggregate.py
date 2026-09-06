@@ -508,58 +508,85 @@ def _main() -> None:
     import sys
     from collections import Counter
 
+    from . import i18n
+
     # Windows 콘솔이 cp949라 한글/기호에서 죽는다. 숫자를 못 보면 의미가 없다.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    try:
+        i18n.init(sys.argv[1:])
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        raise SystemExit(2)
 
     entries = collect_entries()
     snap = snapshot(entries)
     prov = Counter(e.provenance for e in entries)
 
-    print(f"요청 {len(entries)}개, 윈도우 {len(build_windows(entries))}개")
+    print(i18n.pick(
+        f"요청 {len(entries)}개, 윈도우 {len(build_windows(entries))}개",
+        f"{len(entries)} requests, {len(build_windows(entries))} windows"))
     print()
     if snap.used_percentage is not None:
-        print(f"사용률       {snap.used_percentage:.0f}%  (공식 수치)")
+        print(i18n.pick(f"사용률       {snap.used_percentage:.0f}%  (공식 수치)",
+                        f"usage        {snap.used_percentage:.0f}%  (official)"))
     if snap.window is None:
-        print("활성 윈도우 없음 (마지막 블록이 이미 리셋됨)")
+        print(i18n.pick("활성 윈도우 없음 (마지막 블록이 이미 리셋됨)",
+                        "no active window (the last block has already reset)"))
     else:
         w = snap.window
-        print(f"현재 윈도우  {w.start:%Y-%m-%d %H:%M} ~ {w.end:%H:%M} UTC, 요청 {w.entries}개")
+        head = i18n.pick("현재 윈도우 ", "window      ")
+        tail = i18n.pick(f"요청 {w.entries}개", f"{w.entries} requests")
+        print(f"{head} {w.start:%Y-%m-%d %H:%M} ~ {w.end:%H:%M} UTC, {tail}")
         print(f"  input     {w.input_tokens:>14,}")
         print(f"  output    {w.output_tokens:>14,}")
         print(f"  cache_w   {w.cache_creation_tokens:>14,}")
         print(f"  cache_r   {w.cache_read_tokens:>14,}")
-        print(f"  합계      {w.total_tokens:>14,}")
+        print(i18n.pick(f"  합계      {w.total_tokens:>14,}",
+                        f"  total     {w.total_tokens:>14,}"))
         rest = snap.time_to_reset
         assert rest is not None
-        print(f"리셋까지     {int(rest.total_seconds() // 3600)}시간 "
-              f"{int(rest.total_seconds() % 3600 // 60)}분")
-    print(f"burn rate    {snap.tokens_per_minute:,.0f} 토큰/분 (최근 1시간)")
+        h, m = int(rest.total_seconds() // 3600), int(rest.total_seconds() % 3600 // 60)
+        print(i18n.pick(f"리셋까지     {h}시간 {m}분",
+                        f"resets in    {h}h {m}m"))
+    print(i18n.pick(
+        f"burn rate    {snap.tokens_per_minute:,.0f} 토큰/분 (최근 1시간)",
+        f"burn rate    {snap.tokens_per_minute:,.0f} tokens/min (last hour)"))
 
     # --- 주간 (공식 화면의 "주간 한도"에 대응) ---
     now = snap.now
     wk = weekly_totals(entries, now)
     days_left = (weekly_end(now) - now)
+    d = int(days_left.total_seconds() // 86400)
+    h = int(days_left.total_seconds() % 86400 // 3600)
     print()
-    print(f"주간         {weekly_start(now).astimezone():%m-%d %H:%M} 부터, 요청 {wk.requests}개")
-    print(f"  조업량    {wk.catch:>14,}   (input+output)")
-    print(f"  전체      {wk.total_tokens:>14,}   (캐시 포함)")
-    print(f"  다음 리셋까지 {int(days_left.total_seconds() // 86400)}일 "
-          f"{int(days_left.total_seconds() % 86400 // 3600)}시간")
+    print(i18n.pick(
+        f"주간         {weekly_start(now).astimezone():%m-%d %H:%M} 부터, 요청 {wk.requests}개",
+        f"week         since {weekly_start(now).astimezone():%m-%d %H:%M}, {wk.requests} requests"))
+    print(i18n.pick(f"  조업량    {wk.catch:>14,}   (input+output)",
+                    f"  catch     {wk.catch:>14,}   (input+output)"))
+    print(i18n.pick(f"  전체      {wk.total_tokens:>14,}   (캐시 포함)",
+                    f"  total     {wk.total_tokens:>14,}   (cache included)"))
+    print(i18n.pick(f"  다음 리셋까지 {d}일 {h}시간",
+                    f"  resets in {d}d {h}h"))
 
     # --- 모델별 ---
     print()
-    print("모델별 (조업량 기준)")
+    print(i18n.pick("모델별 (조업량 기준)", "by model (catch)"))
     total_catch = sum(t.catch for _, t in model_breakdown(entries)) or 1
     for model, t in model_breakdown(entries):
-        print(f"  {model:<28}{t.catch:>12,}  {100 * t.catch / total_catch:5.1f}%  "
-              f"요청 {t.requests}")
+        req = i18n.pick(f"요청 {t.requests}", f"{t.requests} requests")
+        print(f"  {model:<28}{t.catch:>12,}  {100 * t.catch / total_catch:5.1f}%  {req}")
 
     # --- 전체 누적 ---
     life = totals_of(entries)
     print()
-    print(f"전체 누적    요청 {life.requests:,}개 · 조업량 {life.catch:,} · "
-          f"전체 {life.total_tokens:,}")
+    print(i18n.pick(
+        f"전체 누적    요청 {life.requests:,}개 · 조업량 {life.catch:,} · "
+        f"전체 {life.total_tokens:,}",
+        f"all time     {life.requests:,} requests · catch {life.catch:,} · "
+        f"total {life.total_tokens:,}"))
     print()
     print(f"provenance   {dict(prov)}")
 

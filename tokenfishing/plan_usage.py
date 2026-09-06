@@ -121,7 +121,7 @@ def samples() -> list[Sample]:
     """시간순 샘플. 읽기에 실패하면 마지막으로 성공한 값을 그대로 쓴다."""
     global _cache
 
-    why = "파일 없음"
+    why = "no file"
     for attempt in range(READ_ATTEMPTS):
         # 파일이 없는 것도 실패로 친다. 앱이 지웠다 다시 쓰는 순간일 수 있다.
         path = history_path()
@@ -149,7 +149,7 @@ def samples() -> list[Sample]:
 
     # 여기 오면 화면이 어림으로 떨어진다. **왜인지 삼키지 말 것** — 조용히 빈
     # 목록을 뱉는 바람에 재현 안 되는 화면을 붙들고 시간을 버렸다.
-    debug(f"앱 기록 읽기 실패 ({why}), 캐시 {len(_cache)}개")
+    debug(f"app history unreadable ({why}), {len(_cache)} cached samples")
     return _cache
 
 
@@ -220,79 +220,114 @@ def _doctor() -> None:
     import sys
     from datetime import datetime, timezone
 
+    from . import i18n
+
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    pick = i18n.pick
 
     print(f"python      {sys.executable}")
     print(f"APPDATA     {os.environ.get('APPDATA')}")
 
     path = history_path()
-    print(f"앱 기록     {path if path else '없음 (후보 경로에 파일이 없다)'}")
+    none = pick("없음 (후보 경로에 파일이 없다)", "not found (no candidate path exists)")
+    print(pick("앱 기록     ", "app history ") + f"{path if path else none}")
     if path is not None and str(path) != str(candidate_paths()[0]):
-        print("  (패키지 컨테이너 경로에서 찾았다 — 앱이 MSIX로 설치돼 있다)")
+        print(pick("  (패키지 컨테이너 경로에서 찾았다 — 앱이 MSIX로 설치돼 있다)",
+                   "  (found under the package container — the app is an MSIX install)"))
     if path is None:
         # 같은 경로가 셸마다 다르게 보이는 일이 실제로 있었다. 컨테이너/샌드박스
         # 안에서 돌면 AppData 가 통째로 다른 곳을 가리킨다. 그걸 여기서 가른다.
         for c in candidate_paths():
-            print(f"  후보      {c}  존재={c.exists()}")
+            print(pick(f"  후보      {c}  존재={c.exists()}",
+                       f"  candidate {c}  exists={c.exists()}"))
         expected = candidate_paths()[0]
-        print(f"  부모 폴더 {expected.parent} 존재={expected.parent.is_dir()}")
+        print(pick(f"  부모 폴더 {expected.parent} 존재={expected.parent.is_dir()}",
+                   f"  parent    {expected.parent} exists={expected.parent.is_dir()}"))
         if expected.parent.is_dir():
             try:
                 names = sorted(q.name for q in expected.parent.iterdir())
             except OSError as e:
-                names = [f"<읽기 실패 {type(e).__name__}>"]
-            print(f"  그 안 내용 {names[:12]}{' …' if len(names) > 12 else ''}")
-            print("  → 폴더는 보이는데 파일만 없다. 앱이 아직 안 만들었거나 지웠다.")
+                names = [f"<unreadable {type(e).__name__}>"]
+            listing = f"{names[:12]}{' …' if len(names) > 12 else ''}"
+            print(pick(f"  그 안 내용 {listing}", f"  contents  {listing}"))
+            print(pick("  → 폴더는 보이는데 파일만 없다. 앱이 아직 안 만들었거나 지웠다.",
+                       "  -> the folder is there but the file is not. The app has not "
+                       "written it yet, or removed it."))
         else:
-            print("  → 후보가 전부 비었다. 데스크톱 앱이 아직 기록을 안 만들었거나")
-            print("     설치 형태가 달라 경로가 또 다르다. 앱을 켜두고 15분 기다려 봐라.")
+            print(pick("  → 후보가 전부 비었다. 데스크톱 앱이 아직 기록을 안 만들었거나",
+                       "  -> none of the candidates exist. Either the desktop app has "
+                       "not written"))
+            print(pick("     설치 형태가 달라 경로가 또 다르다. 앱을 켜두고 15분 기다려 봐라.",
+                       "     its history yet, or it is installed somewhere else. Leave "
+                       "the app open for 15 minutes and try again."))
         print(f"  whoami    {os.environ.get('USERNAME')}@{os.environ.get('USERDOMAIN')}")
         print(f"  home      {Path.home()}")
         return
 
     try:
         raw = path.read_text(encoding="utf-8")
-        print(f"  읽기      OK ({len(raw):,} 바이트)")
+        print(pick(f"  읽기      OK ({len(raw):,} 바이트)",
+                   f"  read      OK ({len(raw):,} bytes)"))
     except OSError as e:
-        print(f"  읽기      실패 {type(e).__name__}: {e}")
+        print(pick(f"  읽기      실패 {type(e).__name__}: {e}",
+                   f"  read      failed {type(e).__name__}: {e}"))
         return
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        print(f"  JSON      깨짐 {e}")
+        print(pick(f"  JSON      깨짐 {e}", f"  JSON      broken {e}"))
         return
     print(f"  version   {data.get('version')}")
-    print(f"  samples   {len(data.get('samples') or [])}개 (원본)")
+    n = len(data.get("samples") or [])
+    print(pick(f"  samples   {n}개 (원본)", f"  samples   {n} (raw)"))
 
     rows = samples()
-    print(f"  파싱      {len(rows)}개")
+    print(pick(f"  파싱      {len(rows)}개", f"  parsed    {len(rows)}"))
     if rows:
         r = rows[-1]
-        print(f"  최신      {r.at.astimezone():%H:%M:%S}  fh={r.five_hour!r} sd={r.seven_day!r}")
+        print(pick("  최신      ", "  newest    ")
+              + f"{r.at.astimezone():%H:%M:%S}  fh={r.five_hour!r} sd={r.seven_day!r}")
         print(f"  clean_pct fh→{clean_pct(r.five_hour)!r}  sd→{clean_pct(r.seven_day)!r}")
     s = latest(rows)
-    print(f"  latest()  {'OK' if s else 'None ← 여기가 문제다'}")
+    bad = pick("None ← 여기가 문제다", "None <- this is the problem")
+    print(f"  latest()  {'OK' if s else bad}")
 
     from .statusline import STATE_PATH, load
 
-    print(f"상태줄 훅   {STATE_PATH}")
+    print(pick("상태줄 훅   ", "statusline  ") + f"{STATE_PATH}")
     saved = load()
     if saved is None:
-        print("  캡처      없음 — 훅이 아직 한 번도 안 돌았다")
+        print(pick("  캡처      없음 — 훅이 아직 한 번도 안 돌았다",
+                   "  capture   none - the hook has never run"))
     else:
         five = (saved.get("rate_limits") or {}).get("five_hour") or {}
-        print(f"  캡처      {saved.get('captured_at')}  five_hour={five or '(비어 있음)'}")
+        empty = pick("(비어 있음)", "(empty)")
+        print(pick("  캡처      ", "  capture   ")
+              + f"{saved.get('captured_at')}  five_hour={five or empty}")
 
     from .aggregate import collect_entries, resolve_official
 
     off = resolve_official(collect_entries(), datetime.now(timezone.utc))
     print()
-    print(f"판정        사용률 출처={off.source}  값={off.used_percentage!r}  주간={off.weekly_percentage!r}")
-    print(f"            리셋={off.reset_at.astimezone():%H:%M} {'확정' if off.reset_exact else '추정'}"
-          if off.reset_at else "            리셋=모름")
+    print(pick(f"판정        사용률 출처={off.source}  값={off.used_percentage!r}"
+               f"  주간={off.weekly_percentage!r}",
+               f"verdict     usage source={off.source}  value={off.used_percentage!r}"
+               f"  week={off.weekly_percentage!r}"))
+    if off.reset_at:
+        how = (pick("확정", "exact") if off.reset_exact else pick("추정", "estimated"))
+        print(pick("            리셋=", "            reset=")
+              + f"{off.reset_at.astimezone():%H:%M} {how}")
+    else:
+        print(pick("            리셋=모름", "            reset=unknown"))
 
 
 if __name__ == "__main__":
+    import sys
+
+    from . import i18n
+
+    i18n.init(sys.argv[1:])
     _doctor()

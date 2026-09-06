@@ -36,6 +36,14 @@ from pathlib import Path
 
 STATE_PATH = Path.home() / ".claude" / "tokenfishing-limits.json"
 
+CONFIG_PATH = Path.home() / ".claude" / "tokenfishing-config.json"
+"""config.CONFIG_PATH와 같은 파일. 여기서 다시 적는 이유는 _lang()의 주석과 같다 —
+이 모듈은 훅으로 단독 실행되므로 패키지 상대 import를 못 한다.
+
+**상수로 둘 것.** 예전엔 uninstall()이 이 경로를 그 자리에서 만들어 썼는데, 그러면
+테스트나 시험 실행에서 경로를 갈아끼울 수가 없어서 진짜 설정 파일이 지워진다.
+실제로 한 번 지웠다."""
+
 
 def save(payload: dict) -> None:
     """원자적으로 쓴다. 팝업이 동시에 읽어도 반쯤 쓰인 파일을 보지 않게.
@@ -77,14 +85,23 @@ def _lang() -> str:
     표준 라이브러리만으로 자족해야 해서 여기서는 파일을 직접 읽는다.
     """
     try:
-        saved = json.loads(
-            (Path.home() / ".claude" / "tokenfishing-config.json")
-            .read_text(encoding="utf-8")
-        )
+        saved = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return "ko"
+        return "en"
     lang = saved.get("lang") if isinstance(saved, dict) else None
-    return lang if lang in ("ko", "en") else "ko"
+    return lang if lang in ("ko", "en") else "en"
+
+
+def _pick(ko: str, en: str) -> str:
+    """i18n.pick과 같은 일. 위 주석대로 이 모듈은 i18n을 import할 수 없다.
+
+    다만 CLI에서 불려 온 거라면 i18n이 이미 메모리에 있고, 그쪽이 `--ko` 같은
+    이번 실행의 선택까지 알고 있다. 있으면 그걸 따르고, 없으면(훅으로 단독
+    실행) 설정 파일만 본다.
+    """
+    mod = sys.modules.get("tokenfishing.i18n")
+    lang = mod.LANG if mod is not None else _lang()
+    return ko if lang == "ko" else en
 
 
 def _line(limits: dict, now: datetime) -> str:
@@ -204,7 +221,8 @@ def install() -> int:
         try:
             settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            print(f"{SETTINGS_PATH} 를 읽을 수 없다. 직접 고쳐라.")
+            print(_pick(f"{SETTINGS_PATH} 를 읽을 수 없다. 직접 고쳐라.",
+                        f"cannot read {SETTINGS_PATH}. Fix it by hand."))
             return 1
 
     # 이미 남의 상태줄이 있으면 **뺏지 않고 앞에 선다.** 슬롯은 하나뿐이라
@@ -227,18 +245,25 @@ def install() -> int:
         json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    print(f"상태줄 등록 완료: {SETTINGS_PATH}")
+    print(_pick(f"상태줄 등록 완료: {SETTINGS_PATH}",
+                f"statusline hook registered: {SETTINGS_PATH}"))
     if chained:
         print()
-        print("이미 있던 상태줄은 그대로 둔다. 화면에는 그게 계속 보이고,")
-        print("우리는 그 앞에서 공식 사용량만 받아 적는다:")
+        print(_pick("이미 있던 상태줄은 그대로 둔다. 화면에는 그게 계속 보이고,",
+                    "Your existing statusline is kept. It still shows on screen;"))
+        print(_pick("우리는 그 앞에서 공식 사용량만 받아 적는다:",
+                    "we only read the official figures on the way past:"))
         print(f"  {existing}")
-        print("(해제하면 이 명령이 원래대로 돌아간다)")
+        print(_pick("(해제하면 이 명령이 원래대로 돌아간다)",
+                    "(uninstalling puts this command back)"))
     if backup.exists():
-        print(f"이전 설정 백업:  {backup}")
+        print(_pick(f"이전 설정 백업:  {backup}",
+                    f"previous settings backed up to: {backup}"))
     print()
-    print("Claude Code를 새로 시작하면 그때부터 공식 사용량을 쓴다.")
-    print("(구독 사용량은 Pro/Max에서 세션의 첫 응답 뒤에 들어온다)")
+    print(_pick("Claude Code를 새로 시작하면 그때부터 공식 사용량을 쓴다.",
+                "Restart Claude Code and the official figures start coming through."))
+    print(_pick("(구독 사용량은 Pro/Max에서 세션의 첫 응답 뒤에 들어온다)",
+                "(on Pro/Max they arrive after the first reply of a session)"))
     return 0
 
 
@@ -250,17 +275,20 @@ def uninstall() -> int:
     상태줄이 왜 빈칸인지 알 수가 없다. 우리가 넣은 것만 지우고 나머지는 둔다.
     """
     if not SETTINGS_PATH.exists():
-        print(f"{SETTINGS_PATH} 가 없다. 지울 것도 없다.")
+        print(_pick(f"{SETTINGS_PATH} 가 없다. 지울 것도 없다.",
+                    f"no {SETTINGS_PATH}. Nothing to remove."))
         return 0
     try:
         settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        print(f"{SETTINGS_PATH} 를 읽을 수 없다. 직접 고쳐라.")
+        print(_pick(f"{SETTINGS_PATH} 를 읽을 수 없다. 직접 고쳐라.",
+                    f"cannot read {SETTINGS_PATH}. Fix it by hand."))
         return 1
 
     existing = (settings.get("statusLine") or {}).get("command", "")
     if not is_ours(existing):
-        print("이 도구가 등록한 상태줄이 아니다. 건드리지 않는다.")
+        print(_pick("이 도구가 등록한 상태줄이 아니다. 건드리지 않는다.",
+                    "That statusline was not registered by this tool. Leaving it alone."))
         return 0
 
     # 남의 상태줄 앞에 서 있었으면 그 자리를 돌려준다. 그냥 지우면 사용자가
@@ -268,19 +296,20 @@ def uninstall() -> int:
     original = load_chain()
     if original:
         settings["statusLine"] = {"type": "command", "command": original}
-        print(f"원래 상태줄로 되돌림: {original}")
+        print(_pick(f"원래 상태줄로 되돌림: {original}",
+                    f"restored your previous statusline: {original}"))
     else:
         settings.pop("statusLine", None)
     SETTINGS_PATH.write_text(
         json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"상태줄 해제 완료: {SETTINGS_PATH}")
+    print(_pick(f"상태줄 해제 완료: {SETTINGS_PATH}",
+                f"statusline hook removed: {SETTINGS_PATH}"))
 
-    for leftover in (STATE_PATH, CHAIN_PATH,
-                     Path.home() / ".claude" / "tokenfishing-config.json"):
+    for leftover in (STATE_PATH, CHAIN_PATH, CONFIG_PATH):
         if leftover.exists():
             leftover.unlink()
-            print(f"삭제: {leftover}")
+            print(_pick(f"삭제: {leftover}", f"deleted: {leftover}"))
     return 0
 
 

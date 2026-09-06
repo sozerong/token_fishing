@@ -51,8 +51,10 @@ class Popup:
         self.state = state
         self.settings = config.load()
         # 창이 자기 언어를 스스로 정한다. main()에만 두면 창을 직접 만드는
-        # 경로(테스트·다른 진입점)에서 라벨이 설정과 어긋난다.
-        i18n.set_lang(self.settings.get("lang"))
+        # 경로(테스트·다른 진입점)에서 라벨이 설정과 어긋난다. 다만 이번 실행에
+        # `--ko`를 준 경우엔 그쪽이 이긴다 — 안 그러면 플래그가 창에만 안 먹는다.
+        if not i18n.EXPLICIT:
+            i18n.set_lang(self.settings.get("lang"))
         self.frame = 0
         self.fish: list[dict] = []
         self._reroll_layout()
@@ -440,7 +442,8 @@ def _detach(argv: list[str]) -> int:
         options["start_new_session"] = True
 
     child = subprocess.Popen([executable, "-m", "tokenfishing", *rest], **options)
-    print(f"백그라운드 실행 중 (PID {child.pid})")
+    print(i18n.pick(f"백그라운드 실행 중 (PID {child.pid})",
+                     f"running in the background (PID {child.pid})"))
     return 0
 
 
@@ -450,8 +453,8 @@ USAGE_KO = f"""token fishing {__version__} - Claude 사용량 도트 팝업
 
 옵션
   -d, --detach            백그라운드로 띄우고 셸을 돌려준다
-      --lang ko|en        화면에 쓸 언어. 한 번 정하면 기억한다
-                          (안 주면 시스템 언어를 따른다)
+      --ko, --en          이번 실행에 쓸 언어. 기본은 영어
+      --lang ko|en        기본 언어를 바꾼다. 설정에 기억한다
       --debug             진단 로그를 stderr로 출력한다
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
       --install-statusline
@@ -468,8 +471,8 @@ USAGE_EN = f"""token fishing {__version__} - a pixel window for your Claude Code
 
 Options
   -d, --detach            run in the background and hand the shell back
-      --lang ko|en        language for the window. Remembered once set
-                          (defaults to your system language)
+      --ko, --en          language for this run. English by default
+      --lang ko|en        change the default language and remember it
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
       --install-statusline
@@ -494,24 +497,13 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
 
-    # --lang 은 값을 하나 먹는다. 모르는 옵션 검사에서 그 값을 옵션으로 오해하지
-    # 않도록 먼저 떼어낸다.
-    lang = None
-    if "--lang" in argv:
-        at = argv.index("--lang")
-        if at + 1 < len(argv) and argv[at + 1] in i18n.CHOICES:
-            lang = argv[at + 1]
-            del argv[at:at + 2]
-        else:
-            print(f"--lang needs one of: {', '.join(i18n.CHOICES)}", file=sys.stderr)
-            return 2
-
-    # 도움말도 고른 언어로 나와야 하므로 여기서 먼저 정한다.
-    settings = config.load()
-    if lang and lang != settings.get("lang"):
-        settings["lang"] = lang
-        config.save(settings)
-    i18n.set_lang(settings.get("lang"))
+    # 도움말도 고른 언어로 나와야 하므로 여기서 먼저 정한다. 언어 인자는
+    # i18n.init이 걷어내므로 아래 "모르는 옵션" 검사에 걸리지 않는다.
+    try:
+        argv = i18n.init(argv)
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 2
 
     unknown = [a for a in argv if a.startswith("-") and a not in {
         "-d", "--detach", "--debug", "--doctor",
@@ -521,9 +513,8 @@ def main(argv: list[str] | None = None) -> int:
     if unknown or {"-h", "--help"} & set(argv):
         if unknown:
             joined = " ".join(unknown)
-            print(i18n.t("모르는 옵션:") + f" {joined}"
-                  if i18n.LANG == "ko" else f"unknown option: {joined}",
-                  file=sys.stderr)
+            print(i18n.pick(f"모르는 옵션: {joined}",
+                             f"unknown option: {joined}"), file=sys.stderr)
             print(file=sys.stderr)
         print(usage(), end="")
         return 2 if unknown else 0

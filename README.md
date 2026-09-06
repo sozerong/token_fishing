@@ -105,17 +105,25 @@ as soon as you move to another theme.
 
 ## Language
 
-The window speaks English or Korean. It follows your system language on first run, and
-you can pin it:
+**Everything is in English by default.** Add `--ko` for Korean, on any command:
 
 ```bash
-tokenfishing --lang en
+tokenfishing --ko
+```
+
+```bash
+tokenfishing-console --ko
+```
+
+That applies to the run you are making. To change the default and have it remembered:
+
+```bash
 tokenfishing --lang ko
 ```
 
-The choice is remembered, so you only pass it once. It covers everything on screen — theme
-names, tier labels, the buttons, the window title — and the statusline the hook
-draws inside Claude Code.
+The setting covers every word this tool produces — the window (theme names, tier labels,
+buttons, title), the console output, `--doctor`, the install and uninstall messages, and
+the statusline the hook draws inside Claude Code.
 
 ---
 
@@ -260,7 +268,8 @@ An always-on-top window opens and refreshes every 10 seconds. Close the window t
 tokenfishing [options]
 
   -d, --detach            run in the background and return the shell immediately
-      --lang ko|en        language for the window (remembered; defaults to your system)
+      --ko, --en          language for this run. English by default
+      --lang ko|en        change the default language and remember it
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
       --install-statusline

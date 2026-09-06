@@ -57,7 +57,7 @@ def test_switching_language_changes_what_is_shown():
         # 번역이 없는 말은 원문 그대로 — 화면이 비면 안 된다
         assert i18n.t("듣도보도 못한 라벨") == "듣도보도 못한 라벨"
     finally:
-        i18n.set_lang("ko")
+        i18n.set_lang("en")
 
 
 def test_every_line_template_exists_in_both_languages():
@@ -69,11 +69,47 @@ def test_every_line_template_exists_in_both_languages():
         assert fields(ko) == fields(en), f"{key}: 치환 이름이 다르다"
 
 
-def test_unknown_language_falls_back_to_the_system():
+def test_unknown_language_falls_back_to_english():
     assert i18n.resolve("en") == "en"
     assert i18n.resolve("ko") == "ko"
-    assert i18n.resolve("klingon") in i18n.CHOICES
-    assert i18n.resolve(None) in i18n.CHOICES
+    assert i18n.resolve("klingon") == "en"
+    assert i18n.resolve(None) == "en"
+
+
+def test_ko_flag_is_for_one_run_and_lang_is_remembered():
+    """`--ko`는 이번 실행만, `--lang ko`는 설정에 남는다.
+
+    둘이 뒤바뀌면 조용히 틀린다 — 영어권 사람이 한 번 `--ko`를 눌러 본 뒤로
+    계속 한국어를 보거나, 한국어로 맞춰 둔 사람이 매번 플래그를 붙이게 된다.
+    """
+    stored = {"lang": None}
+    real_load, real_save = config.load, config.save
+    config.load = lambda: dict(stored)
+    config.save = lambda s: stored.update(s)
+    try:
+        rest = i18n.init(["--ko", "--doctor"])
+        assert rest == ["--doctor"], "언어 인자는 걷어내야 한다"
+        assert i18n.LANG == "ko"
+        assert stored["lang"] is None, "--ko 는 설정에 남으면 안 된다"
+
+        i18n.init([])
+        assert i18n.LANG == "en", "기본은 영어"
+
+        i18n.init(["--lang", "ko"])
+        assert stored["lang"] == "ko", "--lang 은 기억해야 한다"
+        i18n.init([])
+        assert i18n.LANG == "ko"
+
+        try:
+            i18n.init(["--lang", "klingon"])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("모르는 --lang 값은 거절해야 한다")
+    finally:
+        config.load, config.save = real_load, real_save
+        i18n.EXPLICIT = False
+        i18n.set_lang("en")
 
 
 def main() -> int:

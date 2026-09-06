@@ -74,6 +74,32 @@ def test_chain_keeps_the_original_visible(tmp_path, monkeypatch):
     assert saved["captured_at"], "언제 받았는지도 남겨야 한다"
 
 
+def test_uninstall_only_touches_the_paths_it_was_given(tmp_path, monkeypatch):
+    """지우는 파일은 전부 모듈 상수를 거쳐야 한다.
+
+    예전엔 uninstall()이 설정 파일 경로를 그 자리에서 만들어 썼다. 그래서 경로를
+    갈아끼운 시험 실행이 **진짜 설정 파일을 지웠다.** 실제로 한 번 날렸다.
+    """
+    import json
+
+    monkeypatch.setattr(statusline, "SETTINGS_PATH", tmp_path / "settings.json")
+    monkeypatch.setattr(statusline, "STATE_PATH", tmp_path / "limits.json")
+    monkeypatch.setattr(statusline, "CHAIN_PATH", tmp_path / "chain.json")
+    monkeypatch.setattr(statusline, "CONFIG_PATH", tmp_path / "config.json")
+    for name in ("limits.json", "chain.json", "config.json"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    statusline.SETTINGS_PATH.write_text(json.dumps(
+        {"statusLine": {"type": "command", "command": statusline.hook_command()}}
+    ), encoding="utf-8")
+
+    real = Path.home() / ".claude" / "tokenfishing-config.json"
+    before = real.exists()
+    statusline.uninstall()
+
+    assert not (tmp_path / "config.json").exists(), "준 경로는 지웠어야 한다"
+    assert real.exists() == before, "홈 디렉터리의 진짜 설정 파일은 건드리면 안 된다"
+
+
 def test_chain_falls_back_when_the_original_is_gone(tmp_path, monkeypatch):
     """플러그인 경로는 세션마다 바뀐다. 원래 게 사라져도 빈 줄을 내면 안 된다."""
     import io

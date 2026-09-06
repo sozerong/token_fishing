@@ -23,6 +23,7 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import i18n
 from .state import GameState, build_state
 
 DEFAULT_OUT = Path("tokenfishing.html")
@@ -34,8 +35,8 @@ def render(state: GameState, generated_at: datetime) -> str:
         "catch": state.catch,
         "fish": state.fish,
         "fishUncapped": state.fish_uncapped,
-        "tier": state.tier,
-        "bite": state.bite,
+        "tier": i18n.t(state.tier),
+        "bite": i18n.t(state.bite),
         "bitePerMin": state.bite_per_min,
         "minutesLeft": state.minutes_left,
         "daylight": state.daylight,
@@ -57,16 +58,22 @@ def main(argv: list[str]) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+    argv = argv[:1] + i18n.init(argv[1:])
     out = Path(argv[1]) if len(argv) > 1 else DEFAULT_OUT
     state = build_state()
     out.write_text(render(state, datetime.now(timezone.utc)), encoding="utf-8")
 
     print(f"{out.resolve()}")
     if state.is_fishing:
-        print(f"조업량 {state.catch:,}토큰 · {state.tier} · 입질 {state.bite} "
-              f"· 남은 시간 {state.minutes_left}분")
+        tier, bite = i18n.t(state.tier), i18n.t(state.bite)
+        print(i18n.pick(
+            f"조업량 {state.catch:,}토큰 · {tier} · 입질 {bite} "
+            f"· 남은 시간 {state.minutes_left}분",
+            f"catch {state.catch:,} tokens · {tier} · bites {bite} "
+            f"· {state.minutes_left}m left"))
     else:
-        print("조업 종료 (활성 윈도우 없음)")
+        print(i18n.pick("조업 종료 (활성 윈도우 없음)",
+                        "window closed (nothing active)"))
     webbrowser.open(out.resolve().as_uri())
     return 0
 
@@ -94,14 +101,14 @@ _HTML = """<!doctype html>
 <div id="app">
   <div id="screen">
     <canvas id="c" width="180" height="120"></canvas>
-    <div class="row"><span class="k">조업량</span><span class="v big" id="catch"></span></div>
-    <div class="row"><span class="k">등급</span><span class="v" id="tier"></span></div>
-    <div class="row"><span class="k">입질</span><span class="v" id="bite"></span></div>
-    <div class="row"><span class="k">리셋까지</span><span class="v" id="left"></span></div>
-    <div class="row"><span class="k">주간</span><span class="v" id="weekly"></span></div>
+    <div class="row"><span class="k">catch</span><span class="v big" id="catch"></span></div>
+    <div class="row"><span class="k">tier</span><span class="v" id="tier"></span></div>
+    <div class="row"><span class="k">bites</span><span class="v" id="bite"></span></div>
+    <div class="row"><span class="k">resets in</span><span class="v" id="left"></span></div>
+    <div class="row"><span class="k">week</span><span class="v" id="weekly"></span></div>
     <div class="foot" id="foot"></div>
   </div>
-  <button id="pip">PiP 창으로 띄우기</button>
+  <button id="pip">Open in a picture-in-picture window</button>
 </div>
 <script>
 const S = __STATE__;
@@ -109,17 +116,17 @@ const S = __STATE__;
 // ---- 수치 표시 ----
 const $ = id => document.getElementById(id);
 $("catch").textContent = !S.isFishing ? "—"
-  : S.fill === null ? S.catch.toLocaleString() + " 토큰"
-  : `${S.fillSource === "official" ? "" : "~"}${Math.round(S.fill*100)}%  ·  ${S.catch.toLocaleString()} 토큰`;
+  : S.fill === null ? S.catch.toLocaleString() + " tokens"
+  : `${S.fillSource === "official" ? "" : "~"}${Math.round(S.fill*100)}%  ·  ${S.catch.toLocaleString()} tokens`;
 $("tier").textContent  = S.tier;
-$("bite").textContent  = `${S.bite} · 캐스팅 ${S.casts.toLocaleString()}회`;
-$("left").textContent  = S.minutesLeft === null ? "조업 종료"
-  : `${S.pinned ? "" : "~"}${Math.floor(S.minutesLeft/60)}시간 ${S.minutesLeft%60}분`;
+$("bite").textContent  = `${S.bite} · ${S.casts.toLocaleString()} casts`;
+$("left").textContent  = S.minutesLeft === null ? "window closed"
+  : `${S.pinned ? "" : "~"}${Math.floor(S.minutesLeft/60)}h ${S.minutesLeft%60}m`;
 if (!S.pinned) $("left").style.color = "#d29922";
 $("weekly").textContent = S.weeklyPct === null || S.weeklyPct === undefined
-  ? `${S.weeklyCatch.toLocaleString()} 토큰`
-  : `${Math.round(S.weeklyPct)}%  ·  ${S.weeklyCatch.toLocaleString()} 토큰`;
-$("foot").textContent = `${S.generatedAt} 기준`;
+  ? `${S.weeklyCatch.toLocaleString()} tokens`
+  : `${Math.round(S.weeklyPct)}%  ·  ${S.weeklyCatch.toLocaleString()} tokens`;
+$("foot").textContent = `as of ${S.generatedAt}`;
 
 // ---- 도트 화면 ----
 const cv = $("c"), g = cv.getContext("2d");
