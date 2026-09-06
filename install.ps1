@@ -141,7 +141,7 @@ function Invoke-Install {
         Write-Warn "$Command is still not on PATH - open a new terminal and try again."
     }
     Write-Info "Run it with:            $Command"
-    Write-Info "Pet screen:             $Command --animal"
+    Write-Info "Apiary screen:          $Command --bee"
     Write-Info "Keep your shell free:   $Command -d"
 }
 

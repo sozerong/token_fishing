@@ -31,7 +31,7 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 
 - [Themes](#themes)
 - [Fishing spots](#fishing-spots)
-- [Pet mode](#pet-mode)
+- [Apiary mode](#apiary-mode)
 - [Display modes](#display-modes)
 - [Language](#language)
 - [Requirements](#requirements)
@@ -84,42 +84,19 @@ which fish you catch.
 | Car camping | Lakeside — land on the left | Open tailgate, camping chair, hanging lantern |
 | Tent camping | Lakeside — land on the left | Tent, campfire with a pot, hanging lantern |
 
-## Pet mode
-
-```bash
-tokenfishing --animal
-```
-
-The same numbers, drawn as a pet in a room. The more you spend, the more food piles up in
-the bowl — and the pet reacts to you:
-
-| You do | The pet does |
-|---|---|
-| Click the pet | Gets petted — hearts pop up |
-| Click the toy | Walks over and plays with it |
-| Click the bowl | Walks over and eats |
-| Click anywhere else | Walks there |
-
-Four species, each with its own idle animation and gait: **dog** (tail wag), **cat**
-(upright tail), **parrot** (hops), **hamster** (dash and pause). The button at the bottom
-cycles through them.
-
-There is no mode button here: the bowl filling up *is* the usage, so this screen is
-accumulate-only.
-
 ## Apiary mode
 
 ```bash
 tokenfishing --bee
 ```
 
-A meadow of flowers, two hives and a smoker, with the bees swarming as you spend. Like
-pet mode it is accumulate-only, and it stays out of the theme button's rotation — it opens
-only when you ask for it, and it does not disturb the theme or mode you had chosen.
+A meadow of flowers, two hives and a smoker, with the bees swarming as you spend. It is
+accumulate-only, and it stays out of the theme button's rotation — it opens only when you
+ask for it, and it does not disturb the theme or mode you had chosen.
 
 ## Display modes
 
-The right button switches between the two. (Pet and apiary mode have neither button.)
+The right button switches between the two. (Apiary mode has neither button.)
 
 | Mode | Behaviour |
 |---|---|
@@ -137,7 +114,7 @@ tokenfishing --lang ko
 ```
 
 The choice is remembered, so you only pass it once. It covers everything on screen — theme
-and pet names, tier labels, the buttons, the window title — and the statusline the hook
+names, tier labels, the buttons, the window title — and the statusline the hook
 draws inside Claude Code.
 
 ---
@@ -283,7 +260,6 @@ tokenfishing [options]
 
   -d, --detach            run in the background and return the shell immediately
       --lang ko|en        language for the window (remembered; defaults to your system)
-      --animal            open the pet screen instead of the landscape themes
       --bee               open the apiary screen (accumulate only)
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
@@ -370,7 +346,7 @@ different slice — but not of everything:
 |---|---|
 | Usage percentage, time until reset, weekly percentage | **Yes** — reported per account |
 | Token count, request count, burn rate, weekly tokens | **No** — only what that machine did |
-| Theme, pet and mode selection | **No** — the config file is local too |
+| Theme and mode selection | **No** — the config file is local too |
 
 There is no combined view. Install the statusline hook on **every** machine: without it a
 machine falls back to estimating the limit from its own partial token count, which comes
@@ -400,7 +376,7 @@ Yes. Concretely:
 
 ## Configuration
 
-Two settings are toggled in the window itself (theme, fishing spot, pet, display mode) and
+Three settings are toggled in the window itself (theme, fishing spot, display mode) and
 stored in `~/.claude/tokenfishing-config.json`. Everything else is an environment
 variable:
 
@@ -508,7 +484,6 @@ Self-checks for the drawing layers run standalone:
 
 ```bash
 python3 -m ccpet.themes     # 8 themes, 7 fishing spots
-python3 -m ccpet.animal     # 4 pets
 ```
 
 To verify parsing accuracy against the reference implementation:

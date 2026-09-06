@@ -168,7 +168,7 @@ do_install() {
         warn "$COMMAND is still not on PATH - open a new terminal and try again."
     fi
     info "Run it with:            $COMMAND"
-    info "Pet screen:             $COMMAND --animal"
+    info "Apiary screen:          $COMMAND --bee"
     info "Keep your shell free:   $COMMAND -d"
 }
 

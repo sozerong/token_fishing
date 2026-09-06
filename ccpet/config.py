@@ -5,7 +5,6 @@
     theme          화면 컨셉 키 ("fishing", "village", ...). themes 모듈 참고
     fishing_spot   낚시 테마일 때만 쓰는 배경 키 ("sea", "pier", ...). 다른
                    테마에서는 무시된다 — 낚시로 돌아왔을 때를 위해 기억만 해 둔다.
-    pet            --animal 모드에서 고르는 동물 키. animal 모듈 참고
     lang           화면에 쓸 언어 "ko" | "en". 없으면 시스템 로케일을 따른다
     learned_limit  공식 사용률에서 역산한 이 계정의 5시간 한도
 """
@@ -17,7 +16,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from . import animal, i18n, themes
+from . import i18n, themes
 
 CONFIG_PATH = Path.home() / ".claude" / "tokenfishing-config.json"
 
@@ -33,7 +32,7 @@ MIN_PCT_TO_LEARN = 10.0
 3%일 때 나눗셈을 하면 작은 오차가 크게 튄다. 어느 정도 찬 뒤에 재는 게 안정적이다."""
 DEFAULTS = {
     "mode": CATCH, "theme": themes.DEFAULT,
-    "fishing_spot": themes.DEFAULT_SPOT, "pet": animal.DEFAULT,
+    "fishing_spot": themes.DEFAULT_SPOT,
     "lang": None, "learned_limit": None,
 }
 
@@ -51,8 +50,6 @@ def load() -> dict:
             data["theme"] = saved["theme"]
         if saved.get("fishing_spot") in themes.FISHING_SPOTS:
             data["fishing_spot"] = saved["fishing_spot"]
-        if saved.get("pet") in animal.PETS:
-            data["pet"] = saved["pet"]
         if saved.get("lang") in i18n.CHOICES:
             data["lang"] = saved["lang"]
         limit = saved.get("learned_limit")

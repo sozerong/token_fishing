@@ -458,7 +458,6 @@ USAGE_KO = f"""token fishing {__version__} - Claude 사용량 도트 팝업
   -d, --detach            백그라운드로 띄우고 셸을 돌려준다
       --lang ko|en        화면에 쓸 언어. 한 번 정하면 기억한다
                           (안 주면 시스템 언어를 따른다)
-      --animal            반려동물 화면으로 띄운다 (강아지·고양이·앵무새·햄스터)
       --bee               양봉장 화면으로 띄운다 (축적 모드 전용)
       --debug             진단 로그를 stderr로 출력한다
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
@@ -478,7 +477,6 @@ Options
   -d, --detach            run in the background and hand the shell back
       --lang ko|en        language for the window. Remembered once set
                           (defaults to your system language)
-      --animal            open the pet screen (dog, cat, parrot, hamster)
       --bee               open the apiary screen (fill mode only)
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
@@ -524,7 +522,7 @@ def main(argv: list[str] | None = None) -> int:
     i18n.set_lang(settings.get("lang"))
 
     unknown = [a for a in argv if a.startswith("-") and a not in {
-        "-d", "--detach", "--animal", "--bee", "--debug", "--doctor",
+        "-d", "--detach", "--bee", "--debug", "--doctor",
         "--install-statusline", "--uninstall-statusline",
         "-V", "--version", "-h", "--help",
     }]
@@ -567,12 +565,7 @@ def main(argv: list[str] | None = None) -> int:
         return _detach(argv)
 
     root = tk.Tk()
-    if "--animal" in argv:
-        from .petpopup import AnimalPopup
-
-        # 반려동물 화면에는 고갈 모드가 없다 — 밥그릇이 차는 것이 곧 사용량이다.
-        AnimalPopup(root, build_state(mode=config.CATCH))
-    elif "--bee" in argv:
+    if "--bee" in argv:
         Popup(root, build_state(mode=config.CATCH, theme=BEE), theme=BEE)
     else:
         Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다

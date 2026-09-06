@@ -145,17 +145,4 @@ _EN: dict[str, str] = {
     "빈 벌통": "Empty hive", "첫 벌": "First bee", "일벌 무리": "Worker swarm",
     "꿀 절반": "Half honey", "꿀 가득": "Full honey",
     "붕붕": "Buzzing", "벌떼": "Swarming",
-
-    # ---- 반려동물 ----
-    "강아지": "Dog", "고양이": "Cat", "앵무새": "Parrot", "햄스터": "Hamster",
-    "사료": "kibble", "모이": "seed", "해바라기씨": "seeds",
-    "꼬리질": "Tail", "그루밍": "Grooming", "지저귐": "Chirps",
-    "볼주머니": "Cheeks", "간식": "treats", "씨앗": "seeds",
-    "빈 그릇": "Empty bowl", "한 입": "A bite", "반 그릇": "Half bowl",
-    "가득": "Full", "배 터짐": "Stuffed",
-    "빈 모이통": "Empty feeder", "반 통": "Half feeder", "넘침": "Overflowing",
-    "그릇 넘침": "Overflowing", "한 줌": "A handful",
-    "신남": "Excited", "흥분": "Zoomies", "여유": "Relaxed", "산책": "Strolling",
-    "장난기": "Playful", "조용": "Quiet", "종알종알": "Chatty", "수다": "Talkative",
-    "시끌벅적": "Raucous", "부산함": "Restless", "쳇바퀴": "On the wheel",
 }

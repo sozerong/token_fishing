@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet import animal, config, i18n, themes  # noqa: E402
+from ccpet import config, i18n, themes  # noqa: E402
 
 
 def displayed_labels() -> set[str]:
@@ -21,10 +21,6 @@ def displayed_labels() -> set[str]:
         for table in (theme.fill_tiers, theme.catch_tiers, theme.activity_tiers):
             words |= {name for _, name in table}
     words |= {spot.name for spot in themes.FISHING_SPOTS.values()}
-    for pet in animal.PETS.values():
-        words |= {pet.name, pet.unit, pet.activity_word, pet.action_word}
-        for table in (pet.fill_tiers, pet.catch_tiers, pet.activity_tiers):
-            words |= {name for _, name in table}
     words |= set(config.MODE_LABELS.values())
     return words
 
