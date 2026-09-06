@@ -1,6 +1,6 @@
 """Snapshot → GameState. 숫자를 낚시 은유로 옮기기만 한다.
 
-여기서 새 집계를 하지 않는다. 필요하면 aggregate에 넣고 compare로 검증한 뒤 가져온다.
+여기서 새 집계를 하지 않는다. 필요하면 aggregate에 넣고 테스트로 검증한 뒤 가져온다.
 
     조업량   = input + output   (5시간 한도가 실제로 세는 값)
     입질     = burn rate

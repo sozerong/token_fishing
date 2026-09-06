@@ -1,7 +1,6 @@
 # 실제 세션 파일에는 대화 본문이 들어 있다. 절대 커밋 금지.
 *.jsonl
 !tests/fixtures/*.jsonl
-tests/reference/
 
 __pycache__/
 *.py[cod]

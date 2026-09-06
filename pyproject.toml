@@ -22,10 +22,6 @@ classifiers = [
 # (pip이 설치해 줄 수 있는 물건이 아니다 — 리눅스에서는 python3-tk로 깐다).
 dependencies = []
 
-[project.optional-dependencies]
-# 대조군. 런타임에는 필요 없고 정확도 검증할 때만 쓴다.
-compare = ["claude-monitor>=4"]
-
 [project.urls]
 Homepage = "https://github.com/sozerong/token_fishing"
 Source = "https://github.com/sozerong/token_fishing"

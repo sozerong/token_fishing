@@ -146,7 +146,37 @@ If that prints `ModuleNotFoundError: No module named 'tkinter'`, install it:
 
 ## Installation
 
-### macOS / Linux
+### With pip
+
+```bash
+pip3 install git+https://github.com/sozerong/token_fishing.git
+tokenfishing --install-statusline
+```
+
+Two commands land on your `PATH`: `tokenfishing` (the window) and `tokenfishing-console`
+(plain text). The second line registers the Claude Code statusline hook — without it the
+window falls back to an estimate, so do not skip it.
+
+Prefer an isolated install, or want to run it without installing at all:
+
+```bash
+pipx install git+https://github.com/sozerong/token_fishing.git   # isolated
+uvx --from git+https://github.com/sozerong/token_fishing.git tokenfishing   # no install
+```
+
+> If your shell answers `command not found: tokenfishing` after a `pip3 install --user`,
+> the user script directory is not on your `PATH`. Either add
+> `python3 -m site --user-base`'s `bin` (Windows: `Scripts`) to it, use `pipx`, or run the
+> installer script below, which does that part for you.
+
+### With the installer script
+
+Use this if you would rather not touch `PATH` yourself. It picks a Python 3.11+
+interpreter, warns you if tkinter is missing (with the exact command for your platform),
+installs through `pipx` if you have it and `pip --user` otherwise, **adds the install
+directory to your `PATH`** (in your shell rc file on macOS/Linux, in your user environment
+on Windows, and in the current session so it works immediately), and registers the
+statusline hook.
 
 ```bash
 git clone https://github.com/sozerong/token_fishing.git
@@ -154,93 +184,61 @@ cd token_fishing
 bash install.sh
 ```
 
-### Windows
-
 ```powershell
 git clone https://github.com/sozerong/token_fishing.git
 cd token_fishing
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-That is the whole setup. The script picks a Python 3.11+ interpreter, warns you if
-tkinter is missing (with the exact command for your platform), installs the package —
-through `pipx` if you have it, otherwise `pip --user` — **adds the install directory to
-your `PATH`** (in your shell rc file on macOS/Linux, in your user environment on Windows,
-and in the current session so it works immediately), and registers the Claude Code
-statusline hook so the numbers are exact.
-
-It installs two commands: `tokenfishing` (the window) and `tokenfishing-console`
-(plain text output).
-
 > **Do not run the installer with `sudo`** (or from an elevated PowerShell). Everything
 > this tool touches lives in your own home directory — `~/.claude`. Installing as root
 > would register the statusline hook in *root's* home, and the tool would never find your
 > usage data. The script refuses to run as root for exactly this reason.
 
-<details>
-<summary>Installing without the script</summary>
-
-```bash
-# Isolated, without touching your global environment
-pipx install git+https://github.com/sozerong/token_fishing.git
-
-# Or into your user site-packages
-pip3 install --user git+https://github.com/sozerong/token_fishing.git
-
-# Run once without installing anything
-uvx --from git+https://github.com/sozerong/token_fishing.git tokenfishing
-
-# From source, for hacking on it
-git clone https://github.com/sozerong/token_fishing.git
-cd token_fishing
-pip3 install -e .
-```
-
-If you install this way, register the hook yourself — without it the window falls back to
-an estimate:
-
-```bash
-tokenfishing --install-statusline
-```
-
-When running from a source checkout, use `python3 -m ccpet` from the repository root.
-</details>
+For hacking on it, install the checkout in place with `pip3 install -e .`, or just run
+`python3 -m ccpet` from the repository root.
 
 ## Updating
 
 ```bash
-cd token_fishing
-bash install.sh update          # Windows: powershell -File install.ps1 update
+pip3 install --upgrade --force-reinstall git+https://github.com/sozerong/token_fishing.git
+tokenfishing --install-statusline
 ```
 
-This pulls the latest source and reinstalls. The statusline hook stores an **absolute
-path** to the installed file, so the script re-registers it every time — otherwise an
-update that moves the install location would leave Claude Code running a file that no
-longer exists.
+`--force-reinstall` is needed because a git URL carries no version for pip to compare, so
+`--upgrade` alone would decide you are already up to date. With pipx it is just
+`pipx upgrade token-fishing`.
+
+Re-register the hook after every update: it stores an **absolute path** to the installed
+file, and an update that moves the install location would otherwise leave Claude Code
+running a file that no longer exists. If you installed with the script, `bash install.sh
+update` (Windows: `powershell -File install.ps1 update`) pulls, reinstalls and re-registers
+in one step.
 
 ## Uninstalling
 
 ```bash
-cd token_fishing
-bash install.sh uninstall       # Windows: powershell -File install.ps1 uninstall
+tokenfishing --uninstall-statusline
+pip3 uninstall token-fishing        # or: pipx uninstall token-fishing
 ```
 
-This removes the commands, unregisters the statusline hook from `~/.claude/settings.json`
-(leaving the rest of your settings alone), takes the `PATH` entry back out, and deletes the
-two files this tool created — `tokenfishing-config.json` and `tokenfishing-limits.json`.
-Your Claude Code transcripts under `~/.claude/projects` are never touched.
-
-If you installed manually, the same cleanup is available on its own:
+The first line unregisters the statusline hook from `~/.claude/settings.json`, leaving the
+rest of your settings alone. Run it **before** removing the package — afterwards the
+command is gone. Two files are left behind for you to delete if you want them gone:
 
 ```bash
-tokenfishing --uninstall-statusline
-pipx uninstall token-fishing        # or: pip uninstall token-fishing
+rm ~/.claude/tokenfishing-config.json ~/.claude/tokenfishing-limits.json
 ```
+
+`bash install.sh uninstall` (Windows: `powershell -File install.ps1 uninstall`) does all of
+that, plus taking the `PATH` entry back out.
+
+Your Claude Code transcripts under `~/.claude/projects` are never touched.
 
 ### Using it on more than one machine
 
-Run the installer on each machine — the transcripts it reads are local, so there is
-nothing to sync. See [Accuracy](#accuracy-where-the-numbers-come-from) for what does and
+Install on each machine — the transcripts it reads are local, so there is nothing to
+sync. See [Accuracy](#accuracy-where-the-numbers-come-from) for what does and
 does not match across machines.
 
 ---
@@ -298,9 +296,9 @@ tokenfishing-console
 
 Everything is derived from the JSONL transcripts Claude Code writes under
 `~/.claude/projects/`. Parsing them correctly is the whole point of this project, and the
-parser is verified item-by-item (input / output / cache-write / cache-read) against
-[claude-monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor) as a
-cross-check, not as a dependency.
+parser is covered item-by-item (input / output / cache-write / cache-read) by the tests in
+`tests/`, on hand-written fixtures that pin down each of the ways a naive reader gets the
+number wrong.
 
 The **usage percentage and reset time** can come from three places, and the window title
 always tells you which one is in play:
@@ -485,18 +483,11 @@ Self-checks for the drawing layers run standalone:
 python3 -m ccpet.themes     # 8 themes, 7 fishing spots
 ```
 
-To verify parsing accuracy against the reference implementation:
-
-```bash
-pip install claude-monitor
-python3 -m claude_monitor --once --output json > tests/reference/snapshot.json
-python3 -m ccpet.compare tests/reference/snapshot.json
-```
-
-`compare` clamps to the reference's own `generated_at` before comparing, so tokens spent
-between the two measurements do not show up as a false difference. It must keep reporting
-a **zero difference on all four token fields** — a screen that looks nice but reports the
-wrong number is a regression, not a feature.
+The token tests must keep passing **item by item** — input, output, cache-write and
+cache-read each on their own. The two ways of misreading the transcripts push the total in
+opposite directions, so a test that only compares the sum can pass while both halves are
+wrong. A screen that looks nice but reports the wrong number is a regression, not a
+feature.
 
 All test fixtures are hand-written synthetic data. Real transcripts contain real
 conversations and are never committed.
