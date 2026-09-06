@@ -17,3 +17,6 @@ tokenfishing.html
 
 # 대조군으로 옆에 클론해 두는 참조 구현. 남의 저장소라 커밋하지 않는다.
 Claude-Code-Usage-Monitor/
+
+# 원본 화면 녹화. README에는 docs/*.gif 만 커밋한다.
+*.mp4

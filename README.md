@@ -2,6 +2,8 @@
 
 *An always-on-top pixel-art window that shows how much Claude Code you have used.*
 
+<img src="docs/demo-fishing.gif" width="350" alt="Fishing theme: fish accumulate as tokens are spent">
+
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen)](pyproject.toml)
@@ -52,6 +54,10 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 
 The left button at the bottom of the window cycles through eight themes. Your choice is
 remembered.
+
+![Eight themes](docs/themes.png)
+
+<img src="docs/demo-themes.gif" width="350" alt="Cycling through the eight themes">
 
 | Theme | Sky | Ground | Landmark | What is counted | When the window drains |
 |---|---|---|---|---|---|
