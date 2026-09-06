@@ -1,7 +1,7 @@
 """GameState → 자체 완결 HTML 한 파일. 더블클릭으로 열리고 PiP 창으로 띄운다.
 
-    py -3.12 -m ccpet.render            생성하고 브라우저로 연다
-    py -3.12 -m ccpet.render out.html   경로 지정
+    py -3.12 -m tokenfishing.render            생성하고 브라우저로 연다
+    py -3.12 -m tokenfishing.render out.html   경로 지정
 
 PiP는 브라우저의 Document Picture-in-Picture API를 쓴다. MCP 호스트 없이도 항상-위
 작은 창이 된다. Phase 3에서 MCP App으로 포장할 때 이 화면을 그대로 재사용한다.

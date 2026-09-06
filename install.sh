@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-PACKAGE="token-fishing"
+PACKAGE="tokenfishing"
 COMMAND="tokenfishing"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -160,7 +160,7 @@ do_install() {
     if command -v "$COMMAND" >/dev/null 2>&1; then
         "$COMMAND" --install-statusline || warn "could not register the hook (see above)"
     else
-        "$PYTHON" -m ccpet --install-statusline || warn "could not register the hook (see above)"
+        "$PYTHON" -m tokenfishing --install-statusline || warn "could not register the hook (see above)"
     fi
 
     bold "Done"
@@ -189,7 +189,7 @@ do_uninstall() {
     if command -v "$COMMAND" >/dev/null 2>&1; then
         "$COMMAND" --uninstall-statusline || warn "could not unregister the hook"
     else
-        "$PYTHON" -m ccpet --uninstall-statusline 2>/dev/null || true
+        "$PYTHON" -m tokenfishing --uninstall-statusline 2>/dev/null || true
     fi
 
     if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "$PACKAGE"; then

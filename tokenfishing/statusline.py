@@ -16,7 +16,7 @@ Claude Code는 상태줄 명령에 세션 JSON을 stdin으로 넘기는데, 거�
 
 또는 ~/.claude/settings.json에 직접:
 
-    "statusLine": { "type": "command", "command": "python -m ccpet.statusline" }
+    "statusLine": { "type": "command", "command": "python -m tokenfishing.statusline" }
 
 참고 (공식 문서):
 - rate_limits는 Pro/Max 구독에서만, 그리고 세션의 첫 API 응답 뒤에 나타난다
@@ -118,7 +118,7 @@ def hook_command() -> str:
 
     이 파일은 표준 라이브러리만 import하므로 패키지 설치 없이 경로로 직접 실행된다.
     상태줄은 세션의 작업 폴더에서 실행되지 저장소 폴더에서 실행되지 않기 때문에,
-    `-m ccpet.statusline` 대신 절대 경로를 쓴다.
+    `-m tokenfishing.statusline` 대신 절대 경로를 쓴다.
     """
     return f'"{sys.executable}" "{Path(__file__).resolve()}"'
 
@@ -128,7 +128,7 @@ def chain_command() -> str:
     return f"{hook_command()} --chain"
 
 
-OWN_MARK = "ccpet/statusline.py"
+OWN_MARK = "tokenfishing/statusline.py"
 """등록된 명령이 우리 것인지 알아보는 표시.
 
 파일명(statusline.py)만 보면 안 된다 — 남의 훅이 `ponytail-statusline.sh`나

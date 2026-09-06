@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet import config, i18n, themes  # noqa: E402
+from tokenfishing import config, i18n, themes  # noqa: E402
 
 
 def displayed_labels() -> set[str]:

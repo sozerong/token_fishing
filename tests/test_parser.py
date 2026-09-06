@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet.parser import parse_file  # noqa: E402
+from tokenfishing.parser import parse_file  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

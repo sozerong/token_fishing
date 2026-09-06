@@ -211,7 +211,7 @@ def clean_pct(value: object) -> float | None:
 def _doctor() -> None:
     """왜 공식 수치를 못 받는지 한 화면에 뱉는다.
 
-        py -3.12 -m ccpet.plan_usage
+        py -3.12 -m tokenfishing.plan_usage
 
     "어림"만 뜨고 이유가 없어서 재현 안 되는 화면을 붙들고 시간을 버린 적이 있다.
     다음엔 이 한 줄로 끝낸다.

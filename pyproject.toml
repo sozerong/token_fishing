@@ -1,5 +1,5 @@
 [project]
-name = "token-fishing"
+name = "tokenfishing"
 dynamic = ["version"]
 description = "An always-on-top pixel-art window showing your Claude Code usage"
 readme = "README.md"
@@ -27,15 +27,15 @@ Homepage = "https://github.com/sozerong/token_fishing"
 Source = "https://github.com/sozerong/token_fishing"
 
 [project.scripts]
-tokenfishing = "ccpet.popup:main"
-tokenfishing-console = "ccpet.aggregate:_main"
+tokenfishing = "tokenfishing.popup:main"
+tokenfishing-console = "tokenfishing.aggregate:_main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["ccpet"]
+packages = ["tokenfishing"]
 
 [tool.setuptools.dynamic]
-version = { attr = "ccpet.__version__" }
+version = { attr = "tokenfishing.__version__" }

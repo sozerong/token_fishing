@@ -1,6 +1,6 @@
 """항상 위에 뜨는 도트 팝업. 실행하면 바로 뜬다.
 
-    py -3.12 -m ccpet
+    py -3.12 -m tokenfishing
 
 왜 브라우저가 아니라 tkinter인가: Document PiP API는 **사용자 제스처가 필수**라
 페이지 로드만으로 창을 띄울 수 없다. 버튼을 한 번 눌러야 한다. "실행하면 짠 하고
@@ -439,7 +439,7 @@ def _detach(argv: list[str]) -> int:
     else:
         options["start_new_session"] = True
 
-    child = subprocess.Popen([executable, "-m", "ccpet", *rest], **options)
+    child = subprocess.Popen([executable, "-m", "tokenfishing", *rest], **options)
     print(f"백그라운드 실행 중 (PID {child.pid})")
     return 0
 
@@ -533,9 +533,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if "--debug" in argv:
-        import ccpet
+        import tokenfishing
 
-        ccpet.DEBUG = True
+        tokenfishing.DEBUG = True
 
     if "--doctor" in argv:
         from .plan_usage import _doctor

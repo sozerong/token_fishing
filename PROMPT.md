@@ -35,7 +35,7 @@ CLAUDE.md를 먼저 읽어라. 특히 "반드시 지킬 함정 세 개" 절이 �
 
 0단계 결과를 반영해서 아래 구조를 만든다.
 
-  ccpet/
+  tokenfishing/
     __init__.py
     paths.py       세션 파일 탐색 (CLAUDE_CONFIG_DIR 환경변수 존중, macOS/Linux/Windows)
     parser.py      JSONL → UsageEntry 스트리밍 파서

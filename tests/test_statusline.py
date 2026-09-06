@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet import statusline  # noqa: E402
+from tokenfishing import statusline  # noqa: E402
 
 
 def test_only_recognises_its_own_command():
@@ -29,8 +29,8 @@ def test_only_recognises_its_own_command():
         assert not statusline.is_ours(cmd), cmd
 
     ours = [
-        '"/usr/bin/python3" "/home/me/site-packages/ccpet/statusline.py"',
-        r'"C:\Py\python.exe" "C:\lib\ccpet\statusline.py" --chain',
+        '"/usr/bin/python3" "/home/me/site-packages/tokenfishing/statusline.py"',
+        r'"C:\Py\python.exe" "C:\lib\tokenfishing\statusline.py" --chain',
     ]
     for cmd in ours:
         assert statusline.is_ours(cmd), cmd

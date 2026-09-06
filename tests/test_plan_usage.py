@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet import plan_usage  # noqa: E402
+from tokenfishing import plan_usage  # noqa: E402
 
 REAL_CANDIDATES = plan_usage.candidate_paths
 

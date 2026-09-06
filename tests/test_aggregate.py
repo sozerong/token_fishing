@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet.aggregate import (  # noqa: E402
+from tokenfishing.aggregate import (  # noqa: E402
     resolve_official,
     build_windows,
     burn_rate,
@@ -26,8 +26,8 @@ from ccpet.aggregate import (  # noqa: E402
     weekly_start,
     weekly_totals,
 )
-from ccpet import plan_usage, statusline  # noqa: E402
-from ccpet.parser import UsageEntry, parse_file  # noqa: E402
+from tokenfishing import plan_usage, statusline  # noqa: E402
+from tokenfishing.parser import UsageEntry, parse_file  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -486,8 +486,8 @@ def test_official_prefers_the_fresher_source():
     from datetime import datetime, timedelta, timezone
     from unittest.mock import patch
 
-    from ccpet import plan_usage
-    from ccpet.aggregate import resolve_official
+    from tokenfishing import plan_usage
+    from tokenfishing.aggregate import resolve_official
 
     now = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
     reset = now + timedelta(hours=2)
@@ -506,15 +506,15 @@ def test_official_prefers_the_fresher_source():
         )
 
     # 훅이 더 최신이면 훅
-    with patch("ccpet.aggregate.official_limits", return_value=hook(1)), \
-         patch("ccpet.plan_usage.samples", return_value=[app(90)]):
+    with patch("tokenfishing.aggregate.official_limits", return_value=hook(1)), \
+         patch("tokenfishing.plan_usage.samples", return_value=[app(90)]):
         off = resolve_official([], now)
     assert (off.source, off.used_percentage) == ("hook", 20.0)
     assert off.weekly_percentage == 11.0, "주간도 같은 출처를 따라가야 한다"
 
     # 앱이 더 최신이면 앱 — 훅 값이 살아 있어도 낡았으면 안 쓴다
-    with patch("ccpet.aggregate.official_limits", return_value=hook(180)), \
-         patch("ccpet.plan_usage.samples", return_value=[app(2)]):
+    with patch("tokenfishing.aggregate.official_limits", return_value=hook(180)), \
+         patch("tokenfishing.plan_usage.samples", return_value=[app(2)]):
         off = resolve_official([], now)
     assert (off.source, off.used_percentage) == ("app", 70.0)
     assert off.weekly_percentage == 44.0, "주간이 5시간과 다른 시점을 가리키면 안 된다"

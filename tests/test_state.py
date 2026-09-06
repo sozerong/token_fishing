@@ -11,9 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet.aggregate import Snapshot, Window  # noqa: E402
-from ccpet import config  # noqa: E402
-from ccpet.state import FISH_PER_TOKEN, MAX_FISH_DRAWN, to_game_state  # noqa: E402
+from tokenfishing.aggregate import Snapshot, Window  # noqa: E402
+from tokenfishing import config  # noqa: E402
+from tokenfishing.state import FISH_PER_TOKEN, MAX_FISH_DRAWN, to_game_state  # noqa: E402
 
 
 def utc(h: int, m: int = 0) -> datetime:

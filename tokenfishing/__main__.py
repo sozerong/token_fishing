@@ -1,4 +1,4 @@
-"""py -3.12 -m ccpet → 도트 팝업."""
+"""py -3.12 -m tokenfishing → 도트 팝업."""
 
 import sys
 

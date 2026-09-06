@@ -2,7 +2,7 @@
 
 *An always-on-top pixel-art window that shows how much Claude Code you have used.*
 
-<img src="docs/demo-fishing.gif" width="350" alt="Fishing theme: fish accumulate as tokens are spent">
+<img src="https://raw.githubusercontent.com/sozerong/token_fishing/main/docs/demo-fishing.gif" width="350" alt="Fishing theme: fish accumulate as tokens are spent">
 
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -55,9 +55,9 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 The left button at the bottom of the window cycles through eight themes. Your choice is
 remembered.
 
-![Eight themes](docs/themes.png)
+![Eight themes](https://raw.githubusercontent.com/sozerong/token_fishing/main/docs/themes.png)
 
-<img src="docs/demo-themes.gif" width="350" alt="Cycling through the eight themes">
+<img src="https://raw.githubusercontent.com/sozerong/token_fishing/main/docs/demo-themes.gif" width="350" alt="Cycling through the eight themes">
 
 | Theme | Sky | Ground | Landmark | What is counted | When the window drains |
 |---|---|---|---|---|---|
@@ -149,7 +149,7 @@ If that prints `ModuleNotFoundError: No module named 'tkinter'`, install it:
 ### With pip
 
 ```bash
-pip3 install git+https://github.com/sozerong/token_fishing.git
+pip3 install tokenfishing
 tokenfishing --install-statusline
 ```
 
@@ -160,9 +160,12 @@ window falls back to an estimate, so do not skip it.
 Prefer an isolated install, or want to run it without installing at all:
 
 ```bash
-pipx install git+https://github.com/sozerong/token_fishing.git   # isolated
-uvx --from git+https://github.com/sozerong/token_fishing.git tokenfishing   # no install
+pipx install tokenfishing        # isolated from the rest of your Python
+uvx tokenfishing                 # run it once, install nothing
 ```
+
+To track `main` instead of the last release, install
+`git+https://github.com/sozerong/token_fishing.git` under any of the commands above.
 
 > If your shell answers `command not found: tokenfishing` after a `pip3 install --user`,
 > the user script directory is not on your `PATH`. Either add
@@ -196,18 +199,18 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 > usage data. The script refuses to run as root for exactly this reason.
 
 For hacking on it, install the checkout in place with `pip3 install -e .`, or just run
-`python3 -m ccpet` from the repository root.
+`python3 -m tokenfishing` from the repository root.
 
 ## Updating
 
 ```bash
-pip3 install --upgrade --force-reinstall git+https://github.com/sozerong/token_fishing.git
+pip3 install --upgrade tokenfishing
 tokenfishing --install-statusline
 ```
 
-`--force-reinstall` is needed because a git URL carries no version for pip to compare, so
-`--upgrade` alone would decide you are already up to date. With pipx it is just
-`pipx upgrade token-fishing`.
+With pipx it is `pipx upgrade tokenfishing`. If you installed from the git URL, add
+`--force-reinstall` — a git URL carries no version for pip to compare, so `--upgrade`
+alone would decide you are already up to date.
 
 Re-register the hook after every update: it stores an **absolute path** to the installed
 file, and an update that moves the install location would otherwise leave Claude Code
@@ -219,7 +222,7 @@ in one step.
 
 ```bash
 tokenfishing --uninstall-statusline
-pip3 uninstall token-fishing        # or: pipx uninstall token-fishing
+pip3 uninstall tokenfishing        # or: pipx uninstall tokenfishing
 ```
 
 The first line unregisters the statusline hook from `~/.claude/settings.json`, leaving the
@@ -278,7 +281,7 @@ tokenfishing -d
 To stop it, close the window or kill the process:
 
 ```bash
-pkill -f "ccpet"                       # macOS / Linux
+pkill -f "tokenfishing"                       # macOS / Linux
 taskkill /F /IM pythonw.exe            # Windows
 ```
 
@@ -480,7 +483,7 @@ python3 -m pytest tests -q
 Self-checks for the drawing layers run standalone:
 
 ```bash
-python3 -m ccpet.themes     # 8 themes, 7 fishing spots
+python3 -m tokenfishing.themes     # 8 themes, 7 fishing spots
 ```
 
 The token tests must keep passing **item by item** — input, output, cache-write and

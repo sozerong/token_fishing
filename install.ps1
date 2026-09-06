@@ -17,7 +17,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Package = 'token-fishing'
+$Package = 'tokenfishing'
 $Command = 'tokenfishing'
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -133,7 +133,7 @@ function Invoke-Install {
     if (Get-Command $Command -ErrorAction SilentlyContinue) {
         & $Command --install-statusline
     } else {
-        Invoke-Python @('-m', 'ccpet', '--install-statusline')
+        Invoke-Python @('-m', 'tokenfishing', '--install-statusline')
     }
 
     Write-Bold 'Done'
@@ -162,7 +162,7 @@ function Invoke-Uninstall {
     if (Get-Command $Command -ErrorAction SilentlyContinue) {
         & $Command --uninstall-statusline
     } else {
-        Invoke-Python @('-m', 'ccpet', '--uninstall-statusline') 2>$null
+        Invoke-Python @('-m', 'tokenfishing', '--uninstall-statusline') 2>$null
     }
 
     if ((Get-Command pipx -ErrorAction SilentlyContinue) -and (pipx list 2>$null | Select-String $Package)) {

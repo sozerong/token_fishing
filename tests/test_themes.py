@@ -11,9 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ccpet import themes  # noqa: E402
-from ccpet.aggregate import Snapshot, Window  # noqa: E402
-from ccpet.state import MAX_FISH_DRAWN, to_game_state  # noqa: E402
+from tokenfishing import themes  # noqa: E402
+from tokenfishing.aggregate import Snapshot, Window  # noqa: E402
+from tokenfishing.state import MAX_FISH_DRAWN, to_game_state  # noqa: E402
 
 # 화면 크기는 themes 가 들고 있다. 팝업이 그걸 임포트해 쓴다.
 W, H, SEA = themes.W, themes.H, themes.HORIZON
