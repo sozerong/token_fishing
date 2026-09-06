@@ -31,7 +31,6 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 
 - [Themes](#themes)
 - [Fishing spots](#fishing-spots)
-- [Apiary mode](#apiary-mode)
 - [Display modes](#display-modes)
 - [Language](#language)
 - [Requirements](#requirements)
@@ -51,8 +50,8 @@ The tier climbs through five steps as the window fills. In the fishing theme tha
 
 ## Themes
 
-The left button at the bottom of the window cycles through seven themes. Your choice is
-remembered. (An eighth, the apiary, opens only through `--bee`.)
+The left button at the bottom of the window cycles through eight themes. Your choice is
+remembered.
 
 | Theme | Sky | Ground | Landmark | What is counted | When the window drains |
 |---|---|---|---|---|---|
@@ -63,6 +62,7 @@ remembered. (An eighth, the apiary, opens only through `--bee`.)
 | Garden | Sun and clouds | Meadow | Greenhouse | Flowers | A round flower bed fills up |
 | Mine | Rock ceiling and lamp | Sleepers and rails | Mine shaft | Ore | An ore cart fills up |
 | City | Scrolling skyline | Two-lane road | Tower | Cars | More buildings light up |
+| Apiary | Sun and clouds | Flower meadow | Two hives and a smoker | Bees | *(fill only — see below)* |
 
 **A theme only changes pictures and wording.** Every theme shares the same tier
 thresholds, so the same usage always maps to the same tier no matter which one you pick.
@@ -84,24 +84,18 @@ which fish you catch.
 | Car camping | Lakeside — land on the left | Open tailgate, camping chair, hanging lantern |
 | Tent camping | Lakeside — land on the left | Tent, campfire with a pot, hanging lantern |
 
-## Apiary mode
-
-```bash
-tokenfishing --bee
-```
-
-A meadow of flowers, two hives and a smoker, with the bees swarming as you spend. It is
-accumulate-only, and it stays out of the theme button's rotation — it opens only when you
-ask for it, and it does not disturb the theme or mode you had chosen.
-
 ## Display modes
 
-The right button switches between the two. (Apiary mode has neither button.)
+The right button switches between the two.
 
 | Mode | Behaviour |
 |---|---|
 | Accumulate | The screen fills up as you spend. *"How much have I used?"* |
 | Depletion | Starts full and empties as you spend. *"How much is left?"* |
+
+The apiary has no depletion mode — a hive is something you fill, not something you empty
+— so the button hides while that theme is on screen. Your choice is kept, and comes back
+as soon as you move to another theme.
 
 ## Language
 
@@ -260,7 +254,6 @@ tokenfishing [options]
 
   -d, --detach            run in the background and return the shell immediately
       --lang ko|en        language for the window (remembered; defaults to your system)
-      --bee               open the apiary screen (accumulate only)
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
       --install-statusline

@@ -37,9 +37,6 @@ STALE_MIN = 15
 앱 기록이 15분 간격이라 그 안쪽은 정상 지연이다. 그보다 오래됐다는 건 그 기기가
 한동안 Claude Code를 안 썼다는 뜻이고, 그때부터 다른 기기와 숫자가 갈린다."""
 
-BEE = "bee"
-"""`--bee` 전용 테마 키. 테마 토글 순환에는 안 낀다 (themes.SOLO_KEYS)."""
-
 ACTIVITY_SPEED = (0.10, 0.22, 0.45, 0.85)
 """활동 등급(4단계) → 움직이는 속도. 등급 이름은 테마마다 다르므로 순번으로 찾는다."""
 
@@ -49,16 +46,9 @@ def _mix(a, b, t: float) -> str:
 
 
 class Popup:
-    def __init__(self, root: tk.Tk, state: GameState, theme: str | None = None) -> None:
-        """theme를 주면 그 테마 전용 화면이 된다 (`--bee`).
-
-        전용 화면은 축적 모드로 고정하고 토글을 전부 감춘다. 고른 값을
-        self.settings에 심지 않는 게 중요하다 — 그 dict는 build_state 안에서
-        그대로 저장될 수 있어서, 잠깐 띄운 화면의 테마가 설정 파일에 눌러앉는다.
-        """
+    def __init__(self, root: tk.Tk, state: GameState) -> None:
         self.root = root
         self.state = state
-        self.solo = theme
         self.settings = config.load()
         # 창이 자기 언어를 스스로 정한다. main()에만 두면 창을 직접 만드는
         # 경로(테스트·다른 진입점)에서 라벨이 설정과 어긋난다.
@@ -105,13 +95,10 @@ class Popup:
             b.pack(side="left", fill="x", expand=True, padx=(0, 2))
             return b
 
-        # 전용 화면(--bee)에는 고를 게 없다. 눌러도 아무 효과 없는 버튼을
-        # 남겨두느니 막대 자체를 안 만든다.
-        if not self.solo:
-            self.theme_btn = button(self._next_theme)
-            self.spot_btn = button(self._next_spot)  # 낚시일 때만 보인다
-            self.mode_btn = button(self._toggle_mode)
-            self._apply_buttons()
+        self.theme_btn = button(self._next_theme)
+        self.spot_btn = button(self._next_spot)      # 낚시일 때만 보인다
+        self.mode_btn = button(self._toggle_mode)    # 고갈 모드가 있는 테마만
+        self._apply_buttons()
 
         debug(f"start fill={state.fill_source} official={state.official_source} "
               f"pct={state.used_percentage} left={state.minutes_left} "
@@ -147,7 +134,14 @@ class Popup:
     def _apply_buttons(self) -> None:
         base = themes.get(self.settings.get("theme"))
         self.theme_btn.configure(text=i18n.t(base.name))
-        self.mode_btn.configure(text=i18n.t(config.MODE_LABELS[self.settings["mode"]]))
+        if base.catch_only:
+            # 고갈 모드가 말이 안 되는 테마(양봉)에서는 모드 버튼을 감춘다.
+            # 고른 모드는 설정에 그대로 남아서 다른 테마로 넘어가면 되살아난다.
+            self.mode_btn.pack_forget()
+        else:
+            self.mode_btn.configure(
+                text=i18n.t(config.MODE_LABELS[self.settings["mode"]]))
+            self.mode_btn.pack(side="left", fill="x", expand=True, padx=(0, 2))
         if base.key == "fishing":
             spot = themes.get_spot(self.settings.get("fishing_spot"))
             self.spot_btn.configure(text=i18n.t(spot.name))
@@ -159,16 +153,16 @@ class Popup:
 
     @property
     def theme(self) -> themes.Theme:
-        base = themes.get(self.solo or self.settings.get("theme"))
+        base = themes.get(self.settings.get("theme"))
         return themes.apply_spot(base, self.settings.get("fishing_spot"))
 
     def _build_state(self) -> GameState:
-        """전용 화면이면 테마와 모드를 덮어쓴다. settings를 복사해 고쳐 넘기면
-        안 되는 이유는 state.build_state의 주석 참고."""
+        """축적 전용 테마에서는 모드를 덮어쓴다. settings를 복사해 고쳐 넘기면
+        안 되는 이유는 state.build_state의 주석 참고 — 잠깐 들른 테마 때문에
+        사용자가 골라 둔 고갈 모드가 설정 파일에서 지워진다."""
         return build_state(
             self.settings,
-            mode=config.CATCH if self.solo else None,
-            theme=self.solo,
+            mode=config.CATCH if self.theme.catch_only else None,
         )
 
     def _reroll_layout(self) -> None:
@@ -458,7 +452,6 @@ USAGE_KO = f"""token fishing {__version__} - Claude 사용량 도트 팝업
   -d, --detach            백그라운드로 띄우고 셸을 돌려준다
       --lang ko|en        화면에 쓸 언어. 한 번 정하면 기억한다
                           (안 주면 시스템 언어를 따른다)
-      --bee               양봉장 화면으로 띄운다 (축적 모드 전용)
       --debug             진단 로그를 stderr로 출력한다
       --doctor            사용량 데이터 소스를 진단하고 끝낸다
       --install-statusline
@@ -477,7 +470,6 @@ Options
   -d, --detach            run in the background and hand the shell back
       --lang ko|en        language for the window. Remembered once set
                           (defaults to your system language)
-      --bee               open the apiary screen (fill mode only)
       --debug             print diagnostics to stderr
       --doctor            diagnose the usage data sources and exit
       --install-statusline
@@ -522,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
     i18n.set_lang(settings.get("lang"))
 
     unknown = [a for a in argv if a.startswith("-") and a not in {
-        "-d", "--detach", "--bee", "--debug", "--doctor",
+        "-d", "--detach", "--debug", "--doctor",
         "--install-statusline", "--uninstall-statusline",
         "-V", "--version", "-h", "--help",
     }]
@@ -565,10 +557,7 @@ def main(argv: list[str] | None = None) -> int:
         return _detach(argv)
 
     root = tk.Tk()
-    if "--bee" in argv:
-        Popup(root, build_state(mode=config.CATCH, theme=BEE), theme=BEE)
-    else:
-        Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다
+    Popup(root, build_state())  # 설정은 Popup이 다시 읽어 반영한다
     root.mainloop()
     return 0
 

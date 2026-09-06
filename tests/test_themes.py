@@ -91,7 +91,8 @@ def test_theme_changes_words_but_not_numbers():
         assert state.theme == key
 
     labels = {to_game_state(snap(), theme=k).tier for k in themes.THEME_KEYS}
-    assert len(labels) == 7, f"테마마다 등급 이름이 달라야 한다: {labels}"
+    assert len(labels) == len(themes.THEME_KEYS), (
+        f"테마마다 등급 이름이 달라야 한다: {labels}")
 
 
 def test_tier_label_comes_from_the_active_theme():
@@ -141,15 +142,20 @@ def test_units_live_where_the_theme_says():
     assert themes.BEE.unit_band[0] < SEA, "벌은 지평선 위까지 날아오른다"
 
 
-def test_solo_themes_stay_out_of_the_toggle():
-    """--bee 전용 테마는 테마 버튼 순환에 끼면 안 된다.
+def test_catch_only_themes_are_in_the_toggle_but_have_no_pile():
+    """고갈 모드가 없는 테마도 테마 버튼으로 고를 수 있어야 한다.
 
-    양봉은 축적 모드 전용이라, 모드 토글이 있는 보통 화면에 섞이면 고갈
-    모드에서 아무것도 안 쌓이는 빈 화면이 된다.
+    팝업이 그 테마에 있는 동안만 축적 모드로 고정하고 모드 버튼을 감춘다.
+    더미를 그릴 일이 없으므로 pile 도 없는 게 맞다 — 있으면 영영 안 그려지는
+    코드가 남는다.
     """
-    for key in themes.SOLO_KEYS:
+    assert themes.BEE.catch_only
+    for key in themes.THEME_KEYS:                # 전부 순환에 들어 있다
         assert key in themes.THEMES, key
-        assert key not in themes.THEME_KEYS, key
+    assert len(themes.THEME_KEYS) == len(themes.THEMES)
+    for key, theme in themes.THEMES.items():
+        if theme.catch_only:
+            assert theme.pile is themes._no_pile, f"{key}: 그려질 일 없는 더미"
 
 
 def test_pile_and_units_add_up_in_depletion_mode():

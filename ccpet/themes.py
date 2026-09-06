@@ -320,6 +320,13 @@ class Theme:
     """고정물을 놓을 x 범위. 배경이 바뀔 때마다 이 안에서 새로 뽑는다.
     차박·캠핑처럼 땅이 화면 왼쪽뿐인 배경은 좁혀야 차·텐트가 물에 안 잠긴다."""
 
+    catch_only: bool = False
+    """고갈 모드가 말이 안 되는 테마인가.
+
+    양봉이 그렇다 — 벌통은 채우는 것이지 비우는 것이 아니다. 켜 두면 팝업이
+    이 테마에 있는 동안 축적 모드로 고정하고 모드 버튼을 감춘다. 고른 모드는
+    설정에 그대로 남아서, 다른 테마로 넘어가면 되살아난다."""
+
     pile_band: tuple[int, int] | None = None
     """모아 둔 것이 차지하는 y 구간. 더미가 떠 있는 동안 돌아다니는 것들은
     여기로 못 들어온다 — 울타리·화단 안팎이 확실해야 통과하는 것처럼 안 보인다."""
@@ -1265,18 +1272,14 @@ BEE = Theme(
     ambient=_ambient_meadow,
     ground_sink=4,
     base_bobs=False,
-    # pile 없음. 양봉은 축적 모드 전용이라(--bee) 더미가 그려질 일이 없다.
+    catch_only=True,                                          # 벌통은 채우는 것이다
+    # pile 없음. 축적 모드로 고정이라 더미가 그려질 일이 없다.
 )
 
 THEMES: dict[str, Theme] = {
     t.key: t for t in (FISHING, VILLAGE, RANCH, SPACE, GARDEN, MINE, CITY, BEE)
 }
-
-SOLO_KEYS = ("bee",)
-"""자기 전용 실행 옵션(`--bee`)으로만 뜨는 테마. 토글 순환에는 안 낀다 —
-축적 모드 전용이라 모드 버튼이 있는 보통 화면에 섞으면 앞뒤가 안 맞는다."""
-
-THEME_KEYS = tuple(k for k in THEMES if k not in SOLO_KEYS)
+THEME_KEYS = tuple(THEMES)
 DEFAULT = FISHING.key
 
 

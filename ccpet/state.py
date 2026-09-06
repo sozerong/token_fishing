@@ -193,18 +193,14 @@ def to_game_state(
     )
 
 
-def build_state(
-    settings: dict | None = None,
-    mode: str | None = None,
-    theme: str | None = None,
-) -> GameState:
+def build_state(settings: dict | None = None, mode: str | None = None) -> GameState:
     """디스크에 있는 것 전부 → 화면이 읽는 상태 하나. 팝업과 HTML의 공통 진입점.
 
     새 집계를 여기서 만들지 않는다. aggregate가 준 값을 모아 to_game_state에 넘길 뿐이다.
 
-    mode/theme는 자기 화면이 정해져 있는 실행 옵션(--animal, --bee)용 덮어쓰기다.
-    settings를 복사해 고쳐 넘기면 안 된다 — 아래 learn_limit이 받은 dict를 그대로
-    저장하기 때문에, 그 화면에서만 쓰는 값이 설정 파일에 눌러앉는다.
+    mode는 고갈 모드가 없는 테마(양봉)를 위한 덮어쓰기다. settings를 복사해 고쳐
+    넘기면 안 된다 — 아래 learn_limit이 받은 dict를 그대로 저장하기 때문에, 잠깐
+    들른 테마의 모드가 설정 파일에 눌러앉아 사용자가 고른 값을 지운다.
     """
     settings = settings or config.load()
     entries = collect_entries()
@@ -225,5 +221,5 @@ def build_state(
         weekly_catch=weekly_totals(entries, now).catch,
         mode=mode or settings["mode"],
         learned_limit=settings.get("learned_limit"),
-        theme=theme or settings.get("theme", themes.DEFAULT),
+        theme=settings.get("theme", themes.DEFAULT),
     )
